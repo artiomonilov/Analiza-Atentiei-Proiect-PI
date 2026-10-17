@@ -1,0 +1,10 @@
+{
+  "window_seconds": 10.0,
+  "frames": 16,
+  "stride_seconds": 2.0,
+  "image_size": 224,
+  "crop_margin": 0.15,
+  "min_face_pixels": 40,
+  "max_gap_seconds": 1.0,
+  "version": "yunet2023mar-320-rgb-imagenet-v1"
+}

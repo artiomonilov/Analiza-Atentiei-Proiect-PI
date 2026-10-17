@@ -1,0 +1,7 @@
+# Versiuni principale verificate local pe Python 3.13.2 / Windows.
+# Snapshot de compatibilitate PyQt5; nu lock tranzitiv cu hash-uri.
+numpy==2.4.2
+opencv-python==5.0.0.93
+torch==2.14.0
+torchvision==0.29.0
+PyQt5==5.15.11

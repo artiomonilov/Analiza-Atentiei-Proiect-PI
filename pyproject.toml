@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "audience-analysis"
+version = "0.1.0"
+description = "Prototip local pentru experimente reproductibile de clasificare video"
+requires-python = ">=3.11"
+dependencies = ["numpy>=1.26,<3", "PySide6>=6.8,<7"]
+
+[project.optional-dependencies]
+ml = ["torch>=2.5,<3", "torchvision>=0.20,<1"]
+video = ["opencv-python-headless>=4.10,<6"]
+ai = ["torch>=2.5,<3", "torchvision>=0.20,<1", "scikit-learn>=1.5,<2"]
+dev = ["pytest>=8,<10", "pytest-qt>=4.4,<5"]
+
+[project.scripts]
+audience-analysis = "audience_analysis.__main__:main"
+audience-experiment = "audience_analysis.experiment:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+audience_analysis = ["assets/*.onnx", "assets/*LICENSE", "assets/README.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/contracts", "tests/ai", "tests/video", "tests/engine", "tests/ui"]
+qt_api = "pyside6"
+

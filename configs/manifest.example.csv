@@ -1,0 +1,4 @@
+clip_id,participant_id,path,split,engagement
+example_train_01,subject_train,videos/train_01.mp4,train,0
+example_validation_01,subject_validation,videos/validation_01.mp4,validation,2
+example_test_01,subject_test,videos/test_01.mp4,test,3

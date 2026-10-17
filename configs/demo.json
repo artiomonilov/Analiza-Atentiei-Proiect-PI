@@ -1,0 +1,10 @@
+{
+  "is_demo": true,
+  "sequence": {
+    "frames": 4, "height": 24, "width": 32,
+    "window_seconds": 0.6, "stride_seconds": 0.2,
+    "sample_tolerance_s": 0.08,
+    "scale": 0.00392156862745098,
+    "mean": [0, 0, 0], "std": [1, 1, 1]
+  }
+}
