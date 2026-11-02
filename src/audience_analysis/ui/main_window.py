@@ -1,6 +1,7 @@
 from PySide6.QtCore import QTimer, Qt, Slot
 from PySide6.QtGui import QImage, QPixmap
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QListWidget, QMainWindow, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QListWidget, QMainWindow, QPushButton, QVBoxLayout, QWidget, QLineEdit, QFormLayout, QFileDialog, QMessageBox, QGroupBox
+
 
 from ..contracts import PredictionResult, SourceConfig, SourceStatusEvent, Status
 from .history import ResultHistory
@@ -22,23 +23,49 @@ class MainWindow(QMainWindow):
         root = QWidget()
         self.setCentralWidget(root)
         layout = QVBoxLayout(root)
+
+        #banner simulare
         self.banner = QLabel("SIMULARE — fără analiză AI reală")
         self.banner.setStyleSheet("background:#ffdc86; color:#292318; padding:12px; font-weight:bold;")
         layout.addWidget(self.banner)
-        layout.addWidget(QLabel(self.source.display_name))
+
+        #formular 
+        source_box = QGroupBox("Configurare Sursa (SourceConfig)")
+        form_layout = QFormLayout(source_box)
+
+        self.input_participant_id = QLineEdit("P01")
+        self.input_display_name = QLineEdit("Participant 1")
+
+        #selector de fisier imagine
+        img_layout = QHBoxLayout()
+        self.input_source = QLineEdit("demo")
+        self.browse_button = QPushButton("Alege...")
+        self.browse_button.clicked.connect(self.browse_image)
+        img_layout.addWidget(self.input_source)
+        img_layout.addWidget(self.browse_button)
+
+        form_layout.addRow("ID Participant: ", self.input_participant_id)
+        form_layout.addRow("Nume afisat: ", self.input_display_name)
+        form_layout.addRow("Fisier/Sursa: ", img_layout)
+        layout.addWidget(source_box)
+
+        #previzualizare imagine
         self.preview = QLabel("Previzualizare sintetică — fără persoane")
         self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview.setMinimumHeight(220)
         layout.addWidget(self.preview)
+
+        #butoane
         controls = QHBoxLayout()
         self.start_button = QPushButton("Pornește")
         self.stop_button = QPushButton("Oprește")
         self.start_button.clicked.connect(self.start_source)
-        self.stop_button.clicked.connect(lambda: self.engine.stop_source(self.source.source_id))
+        self.stop_button.clicked.connect(self.stop_source)
         self.stop_button.setEnabled(False)
         controls.addWidget(self.start_button)
         controls.addWidget(self.stop_button)
         layout.addLayout(controls)
+
         self.status_label = QLabel("Pregătit pentru simulare")
         self.result_label = QLabel("Rezultat: —")
         self.interval_label = QLabel("Interval analizat: —")
@@ -47,10 +74,12 @@ class MainWindow(QMainWindow):
             layout.addWidget(widget)
         self.history_list = QListWidget()
         layout.addWidget(self.history_list)
+
         # TODO P3-S2.1/P3-S5.1: intrare formular + SourceConfig; construiește grila
         # folosind comenzile motorului; ieșire carduri independente; teste CRUD/restart.
         # TODO P3-S5.3/P3-S5.4: extinde ResultHistory într-un tabel și dialog CSV;
         # verifică rânduri unice, is_demo și celule goale la eroare.
+
         self.engine.result_ready.connect(self.on_result)
         self.engine.status_changed.connect(self.on_status)
         self.engine.shutdown_finished.connect(self.finish_close, Qt.ConnectionType.QueuedConnection)
@@ -60,9 +89,42 @@ class MainWindow(QMainWindow):
         self.preview_timer.timeout.connect(self.refresh_preview)
         self.preview_timer.start()
 
+    def browse_image(self) -> None:
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Selecteaza fisierul imagine",
+            "",
+            "Imagini (*.png *.jpg *.jpeg *.bmp);;Toate fisierele (*.*)"
+        )
+        if file_path:
+            self.input_source.setText(file_path)
+
     @Slot()
     def start_source(self) -> None:
+        source_id = self.input_participant_id.text().strip()
+        display_name = self.input_display_name.text().strip()
+        uri = self.input_source.text().strip()
+
+        #validare campuri
+        if not source_id:
+            QMessageBox.warning(self, "Eroare validare", "ID-ul participantului este gol.")
+            return
+        if not uri:
+            QMessageBox.warning(self, "Eroare validare", "Fisierul/sursa lipseste.")
+            return
+
+        self.source = SourceConfig(source_id, display_name, uri)
+        try:
+            self.engine.add_source(self.source)
+        except ValueError:
+            #sursa exista deja
+            pass
         self.engine.start_source(self.source.source_id)
+
+    @Slot()
+    def stop_source(self) -> None:
+        if hasattr(self, "source") and self.source:
+            self.engine.stop_source(self.source.source_id)
 
     @Slot(object)
     def on_status(self, event: SourceStatusEvent) -> None:
@@ -91,6 +153,10 @@ class MainWindow(QMainWindow):
         if not self.history.add(result):
             return
         levels = ", ".join(f"{name}: nivel {value}" for name, value in (result.levels or {}).items()) or "—"
+        
+        if not result.levels:
+            levels = "- (fara predicitie / date insuficiente)"
+        
         self.result_label.setText(f"SIMULARE · {levels}")
         interval = f"{result.window_start_s:.2f}–{result.window_end_s:.2f} s"
         self.interval_label.setText(f"Interval analizat: {interval} · separat de cadrul curent")
