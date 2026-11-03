@@ -38,3 +38,7 @@ Numele membrilor nu au fost furnizate. Rolurile nu atribuie contribuții umane c
 Secțiunile de mai sus consemnează implementarea anterioară. Noul mini-template este documentat în README și `docs/contracts.md`. Codul anterior a fost păstrat, cu contractele în `legacy_contracts.py` și fereastra în `legacy_ui.py`. Demo-urile noi nu îl activează.
 
 PySide6 este acum instalat local. Verificarea mini-template-ului a trecut cu **27 de teste într-un mediu curat**, fără pachetele AI/video. Vezi [raportul taskului 04](task04-verification.md) pentru versiuni, exemple, verificarea offscreen și limite. Modelul real și integrarea video reală rămân taskurile echipei; checklisturile originale sunt păstrate nebifate în `docs/planning/`.
+
+## Actualizare — interfață terminal, 3 noiembrie 2026
+
+Fluxul nou este exclusiv de terminal: primește o imagine sau un videoclip local, afișează progresul citirii și confirmă finalizarea. La cerere, încarcă un model local pentru distribuția etichetelor de expresie, fără detecție facială, identificare sau urmărire. Verificarea automată este acoperită de `tests/terminal`.

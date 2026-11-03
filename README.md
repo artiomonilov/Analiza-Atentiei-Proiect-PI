@@ -2,7 +2,23 @@
 
 Prototip Python pentru **experimente pe materiale autorizate**, cu aplicație desktop, preprocesare comună și comparație R0/R1/R2. Etichetele estimate nu sunt măsurători ale atenției și nu sunt destinate evaluării sau monitorizării operaționale a studenților.
 
-# 
+## Interfață de terminal pentru cadre și videoclipuri
+
+Pipeline-ul rulează exclusiv în terminal, primește o imagine sau un videoclip local, citește videoclipul incremental și exportă rapoarte. Nu salvează imagini cu fețe și nu identifică persoane.
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -e ".[terminal,model,vision,dev]"
+
+# imagine
+.\.venv\Scripts\python.exe -m audience_analysis image --input C:\cale\către\frame.png --output-dir results\image
+
+# video, cu un cadru selectat pe secundă
+.\.venv\Scripts\python.exe -m audience_analysis video --input C:\cale\către\video.mp4 --sample-interval 1 --device auto --output-dir results\video
+```
+
+Modelul [jihedjabnoun/vit-face-emotion-recognition](https://huggingface.co/jihedjabnoun/vit-face-emotion-recognition) este încărcat local o dată pe proces pentru fața principală (cea mai mare casetă YuNet). Pentru videoclip, consola afișează frecvența expresiilor; `summary.json`, `frames.csv`, `windows.csv` și `errors.log` sunt salvate în directorul indicat. La prima rulare modelul poate necesita internet, apoi folosește cache-ul local.
+
+Modelul are șapte clase (`Anger`, `Disgust`, `Fear`, `Happiness`, `Neutral`, `Sadness`, `Surprise`) și se așteaptă la o față clară, proeminentă în imagine. MediaPipe Face Landmarker este opțional și necesită un fișier local `.task`: `--face-landmarker-model C:\cale\face_landmarker.task`. Fără model sau fără calibrare, pipeline-ul raportează `unknown` pentru atenție; unghiurile capului nu sunt prezentate ca direcție exactă a privirii. Modelul de angajament DAiSEE nu este furnizat, prin urmare rezultatul rămâne explicit „Model de angajament indisponibil”.
 
 ## Task 04 — mini-template comun P1/P2/P3
 
@@ -19,7 +35,7 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
 ```
 
-Mediul `.venv` existent este deja instalat editable. Dacă folosești un mediu existent, nu îl recrea. Dependențe de bază: NumPy și PySide6. Grupuri opționale: `[video]` = opencv-python-headless; `[ai]` = torch, torchvision, scikit-learn; `[dev]` = pytest, pytest-qt. `[ml]` este păstrat pentru codul anterior. **Nu instala simultan opencv-python și opencv-python-headless**, deoarece ambele oferă `cv2`; folosește un mediu separat pentru schimbarea variantei.
+Mediul `.venv` existent este deja instalat editable. Dacă folosești un mediu existent, nu îl recrea. Dependențe de bază: NumPy și PySide6. Grupuri opționale: `[terminal]`/`[video]` = opencv-python; `[model]` = PyTorch, Transformers și Pillow; `[dev]` = pytest, pytest-qt. `[ai]` și `[ml]` sunt păstrate numai pentru codul istoric. **Nu instala simultan opencv-python și opencv-python-headless**, deoarece ambele oferă `cv2`; folosește un mediu separat pentru schimbarea variantei.
 
 `requirements-lock.txt` este snapshotul istoric al prototipului anterior, nu un lock al mini-template-ului. Versiunile verificate acum sunt consemnate în `docs/task04-verification.md`; nu pretindem verificarea tuturor combinațiilor permise de pyproject.
 
@@ -64,6 +80,6 @@ Implementat aici: contracte validate, FakePredictor determinist, sursă sintetic
 .\.venv\Scripts\python.exe -m pytest
 ```
 
-Selecția implicită acoperă doar `tests/contracts`, `tests/ai`, `tests/video`, `tests/engine`, `tests/ui`. Nu necesită dataset, camere, rețea sau modele. Testele anterioare `tests/test_*.py` sunt păstrate separat, pot necesita opționale și nu sunt declarate reexecutate în această livrare.
+Selecția implicită acoperă `tests/contracts`, `tests/ai`, `tests/video`, `tests/engine`, `tests/ui` și `tests/terminal`. Testele terminalului nu necesită dataset, cameră, rețea sau model. Testele anterioare `tests/test_*.py` sunt păstrate separat, pot necesita opționale și nu sunt declarate reexecutate în această livrare.
 
 Testele Qt folosesc implicit offscreen; aceasta nu echivalează cu verificarea vizuală manuală pe Windows. Vezi raportul verificării pentru comenzile executate și limite. Dacă folderul temporar al mediului restricționat nu permite scrierea, setează TEMP/TMP într-un subfolder `artifacts/tmp` și rulează pytest cu `--basetemp artifacts/pytest-task04`.

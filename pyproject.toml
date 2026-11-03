@@ -11,8 +11,11 @@ dependencies = ["numpy>=1.26,<3", "PySide6>=6.8,<7"]
 
 [project.optional-dependencies]
 ml = ["torch>=2.5,<3", "torchvision>=0.20,<1"]
-video = ["opencv-python-headless>=4.10,<6"]
+video = ["opencv-python>=4.10,<6"]
 ai = ["torch>=2.5,<3", "torchvision>=0.20,<1", "scikit-learn>=1.5,<2"]
+terminal = ["opencv-python>=4.10,<6"]
+model = ["torch>=2.5,<3", "transformers>=4.46,<6", "Pillow>=10,<13"]
+vision = ["mediapipe>=1.2,<2"]
 dev = ["pytest>=8,<10", "pytest-qt>=4.4,<5"]
 
 [project.scripts]
@@ -26,6 +29,6 @@ where = ["src"]
 audience_analysis = ["assets/*.onnx", "assets/*LICENSE", "assets/README.md"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests/contracts", "tests/ai", "tests/video", "tests/engine", "tests/ui"]
+testpaths = ["tests/contracts", "tests/ai", "tests/video", "tests/engine", "tests/ui", "tests/terminal"]
 qt_api = "pyside6"
 

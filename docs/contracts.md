@@ -43,3 +43,9 @@ Istoricul deduplică (source_id, run_id, request_id). CSV păstrează is_demo ș
 ## Cod anterior
 
 Contractele vechi sunt păstrate în `legacy_contracts.py`, iar fereastra anterioară în `legacy_ui.py`; importurile vechilor module/teste au fost ajustate. `python -m audience_analysis.app` rămâne intrarea anterioară, nefolosită de mini-template. Nu există un al doilea proiect sau un al doilea pachet instalabil. Adaptarea codului real la noile contracte rămâne în taskurile P1/P2, nu este activată în această livrare.
+
+## Pipeline CLI experimental
+
+`AnalysisPipeline` separă detecția, orientarea capului, expresiile și angajamentul. `FrameResult` păstrează timestamp-ul, numărul de fețe, starea feței, `AttentionEstimate`, distribuția expresiei, timpul de inferență și eroarea. `AnalysisResult` agregă numai cadrele disponibile și exportă `summary.json`, `frames.csv`, `windows.csv` și `errors.log`.
+
+YuNet selectează determinist cea mai mare față, fără identificare sau urmărire. Predictorul de expresii este încărcat o dată și primește numai decupajul acelei fețe. MediaPipe este activat doar cu un model `.task` indicat explicit; fără calibrare, direcția atenției este `unknown`, chiar dacă unghiurile capului sunt disponibile. `EngagementPredictor` are contractul `predict_clip(frames) -> EngagementResult`, dar predictorul instalat returnează explicit „Model de angajament indisponibil”; expresiile nu sunt convertite în angajament.
