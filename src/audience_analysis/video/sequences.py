@@ -1,3 +1,11 @@
+"""P2 — Formarea secvențelor temporale pentru model.
+
+Conține:
+    SequenceBuilder   păstrează ultimele cadre ale UNEI fețe (sau ale sursei demo) și scoate din când
+                      în când o PreparedSequence: config.frames cadre egal distanțate pe config.window_seconds
+
+Istoricul de aici este separat de coada AI: istoricul se tot schimbă, secvența scoasă este o copie.
+"""
 from collections import deque
 
 import numpy as np
@@ -8,11 +16,9 @@ from .preprocessing import prepare_bgr
 
 
 class SequenceBuilder:
-    """Istoric separat de coada AI; în demo se pregătește întregul cadru sintetic."""
+    """Istoricul de cadre al unei singure fețe (sau al sursei demo) și regulile de selectare după timp."""
 
-    def __init__(self, config: SequenceConfig, *, demo: bool, max_frames: int = 128):
-        if not demo:
-            raise NotImplementedError("P2-S3.1: selectează decupajul real înainte de pregătire")
+    def __init__(self, config: SequenceConfig, *, demo: bool = False, max_frames: int = 128):
         if max_frames < config.frames:
             raise ValueError("Istoric mai mic decât secvența")
         self.config = config
@@ -20,10 +26,12 @@ class SequenceBuilder:
         self.last_window_end: float | None = None
 
     def clear(self) -> None:
+        """Golește istoricul (la schimbarea rulării, la pierderea feței sau la oprire)."""
         self.history.clear()
         self.last_window_end = None
 
     def add(self, packet: FramePacket) -> PreparedSequence | None:
+        """Adaugă un cadru și, dacă se poate, întoarce o secvență nouă."""
         if self.history:
             previous = self.history[-1]
             if (packet.run_id != previous.run_id or packet.source_id != previous.source_id
@@ -38,9 +46,11 @@ class SequenceBuilder:
             return None
         if self.last_window_end is not None and end - self.last_window_end < self.config.stride_seconds - 1e-8:
             return None
+        # alegem config.frames cadre cât mai aproape de momente egal distanțate în fereastră
         times = np.array([p.media_time_s for p in self.history])
         targets = np.linspace(start, end, self.config.frames)
         indices = np.abs(times[:, None] - targets).argmin(axis=0)
+        # respingem dacă lipsesc cadre (același cadru ales de două ori sau prea departe de țintă)
         if len(set(indices)) != self.config.frames or np.max(np.abs(times[indices] - targets)) > self.config.sample_tolerance_s:
             return None
         frames = np.stack([prepare_bgr(self.history[i].image, self.config) for i in indices])
