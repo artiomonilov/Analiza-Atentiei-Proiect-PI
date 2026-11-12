@@ -4,7 +4,7 @@
 
 Construim o aplicație desktop, integral în **Python**, care primește surse video și afișează pentru fiecare participant nivelul de angajament estimat de AI.
 
-**MVP:** încărcăm un videoclip cu un participant. Aplicația detectează fața, pregătește secvențe, le pune în coada de analiză și afișează predicțiile unui model antrenat. Putem porni și opri procesarea. Când imaginile nu sunt utilizabile, apare „date insuficiente”, nu „neatent”.
+**MVP:** încărcăm un videoclip cu un participant. Aplicația detectează fața, pregătește secvențe, le pune în coada de analiză și afișează predicțiile unui model antrenat. Putem porni și opri procesarea. Când imaginile nu sunt utilizabile, apare „date insuficiente”, nu „neatent”. 
 
 **La final:** țintim 3–4 surse simultane, fișiere video, cameră locală și un tip de flux de rețea testat. Adăugăm istoricul, exportul CSV și estimări separate pentru plictiseală, confuzie și frustrare, după antrenare și evaluare.
 
@@ -37,7 +37,8 @@ Folosim **DAiSEE**, care acoperă aceste patru dimensiuni, fiecare pe patru nive
 | **F5** | Estimări separate pentru plictiseală, confuzie și frustrare. | P1 — PyTorch |
 | **F6** | Adăugare/eliminare surse, pornire/oprire, grilă video și afișarea predicțiilor/stărilor. | P3 — PySide6 |
 | **F7** | Istoric per participant și export CSV. | P3 — Python, PySide6, `csv` |
-
+| **F8** | Clasificarea datelor extrase în două subclase: Atent sau Nu Atent. Deasemenea să putem caracteriza dacă se află subiectul într-o stare de oboseală, sau alte stări relevante.
+| **F9** | O metodă de voting care alege pe baza unei perioade specificate (60frames dintr-o secundă) câte date analizăm și care dintre ele. 
 
 ## 4. Taskurile fiecărei persoane
 

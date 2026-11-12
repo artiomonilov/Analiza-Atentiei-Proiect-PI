@@ -41,4 +41,4 @@ assert not any(name.startswith('PySide6') for name in sys.modules)
 """
     result = subprocess.run([sys.executable, "-c", code], capture_output=True, encoding="utf-8", timeout=15)
     assert result.returncode == 0, result.stderr
-    assert "Modelul real nu este configurat" in result.stdout
+    assert "Pipeline CLI local pentru analiză video experimentală" in result.stdout
