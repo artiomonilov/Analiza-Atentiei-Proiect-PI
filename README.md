@@ -16,9 +16,34 @@ Pipeline-ul rulează exclusiv în terminal, primește o imagine sau un videoclip
 .\.venv\Scripts\python.exe -m audience_analysis video --input C:\cale\către\video.mp4 --sample-interval 1 --device auto --output-dir results\video
 ```
 
+Pentru pornire simplă pe Windows există și launcherul `start-analysis.ps1`. Fără argumente, cere calea fișierului; detectează automat dacă este imagine sau videoclip și creează un director de rezultate cu dată/oră.
+
+```powershell
+.\start-analysis.ps1
+.\start-analysis.ps1 -InputPath "C:\cale\către\video.mp4" -SampleInterval 1
+```
+
 Modelul [jihedjabnoun/vit-face-emotion-recognition](https://huggingface.co/jihedjabnoun/vit-face-emotion-recognition) este încărcat local o dată pe proces pentru fața principală (cea mai mare casetă YuNet). Pentru videoclip, consola afișează frecvența expresiilor; `summary.json`, `frames.csv`, `windows.csv` și `errors.log` sunt salvate în directorul indicat. La prima rulare modelul poate necesita internet, apoi folosește cache-ul local.
 
 Modelul are șapte clase (`Anger`, `Disgust`, `Fear`, `Happiness`, `Neutral`, `Sadness`, `Surprise`) și se așteaptă la o față clară, proeminentă în imagine. MediaPipe Face Landmarker este opțional și necesită un fișier local `.task`: `--face-landmarker-model C:\cale\face_landmarker.task`. Fără model sau fără calibrare, pipeline-ul raportează `unknown` pentru atenție; unghiurile capului nu sunt prezentate ca direcție exactă a privirii. Modelul de angajament DAiSEE nu este furnizat, prin urmare rezultatul rămâne explicit „Model de angajament indisponibil”.
+
+## MediaPipe Face Landmarker pe o fotografie
+
+Modulul reutilizabil `audience_analysis.face_landmarker` este folosit atât de scriptul foto, cât și de adaptorul existent `MediaPipeHeadPose` din `vision.py`. Utilizează Tasks API în modul IMAGE, maximum o față, cu blendshapes și matricea facială activate. Modelul local se află în `models/face_landmarker.task`; fișierele `.task` sunt ignorate de Git și nu se descarcă automat. Un alt laptop trebuie să primească separat modelul compatibil, din sursa oficială [MediaPipe](https://developers.google.com/edge/mediapipe/solutions/vision/face_landmarker/python).
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -e ".[vision,dev]"
+.\.venv\Scripts\python.exe test_face_landmarker.py --input "data/test/img1.jpg"
+
+# căi configurabile, relative la directorul curent
+.\.venv\Scripts\python.exe test_face_landmarker.py --input "data/test/img1.jpg" --model "models/face_landmarker.task" --output "results/face_landmarker_result.png"
+```
+
+La o față detectată, consola afișează numărul de fețe procesate (maximum 1), numărul de landmarks (în mod normal 478), primele 10 blendshapes în ordinea scorurilor și matricea 4×4. Imaginea cu punctele verzi se salvează explicit la executarea scriptului; directorul de ieșire este creat automat. Dacă nu se detectează față, consola spune acest lucru și se salvează o copie fără puncte. O imagine lipsă/invalidă sau un model lipsă produce mesaj de eroare și cod de ieșire nenul. Fotografia originală nu poate fi aleasă ca ieșire.
+
+API: `with FaceLandmarker(model_path) as detector: result = detector.process(frame_bgr)`. `result.faces` conține landmarks `(x,y,z)`, blendshapes `(name,score)` și `transformation_matrix` sau `None`. Randarea este separată prin `draw_landmarks`. Importul modulului nu pornește MediaPipe; modelul se încarcă la construirea detectorului și se eliberează la ieșirea din `with`.
+
+Aceste rezultate sunt geometrie și coeficienți faciali. Matricea nu reprezintă direct yaw/pitch/roll; conversiile viitoare necesită convenții de coordonate și calibrare. Scriptul foto nu calculează atenția. Modul IMAGE nu urmărește temporal fața; extensia la video va necesita modul VIDEO și timestamp-uri monotone. Verificări și limite: [docs/face-landmarker-verification.md](docs/face-landmarker-verification.md).
 
 ## Task 04 — mini-template comun P1/P2/P3
 

@@ -75,15 +75,8 @@ class MediaPipeHeadPose:
             self.unavailable_reason = f"Fișierul Face Landmarker nu există: {model_path}"
             return
         try:
-            import mediapipe as mp
-            options = mp.tasks.vision.FaceLandmarkerOptions(
-                base_options=mp.tasks.BaseOptions(model_asset_path=str(model_path)),
-                running_mode=mp.tasks.vision.RunningMode.IMAGE,
-                num_faces=1,
-                output_facial_transformation_matrixes=True,
-            )
-            self.mp = mp
-            self.landmarker = mp.tasks.vision.FaceLandmarker.create_from_options(options)
+            from .face_landmarker import FaceLandmarker
+            self.landmarker = FaceLandmarker(model_path)
             self.unavailable_reason = None
         except (ImportError, OSError, RuntimeError, ValueError) as error:
             self.unavailable_reason = f"Face Landmarker indisponibil: {error}"
@@ -91,11 +84,10 @@ class MediaPipeHeadPose:
     def estimate(self, bgr: np.ndarray) -> AttentionEstimate:
         if self.landmarker is None:
             return AttentionEstimate("unknown", reason=self.unavailable_reason)
-        rgb = bgr[:, :, ::-1]
-        result = self.landmarker.detect(self.mp.Image(image_format=self.mp.ImageFormat.SRGB, data=rgb))
-        if not result.facial_transformation_matrixes:
+        result = self.landmarker.process(bgr)
+        if not result.faces or result.faces[0].transformation_matrix is None:
             return AttentionEstimate("unknown", reason="MediaPipe nu a returnat repere faciale.")
-        matrix = np.asarray(result.facial_transformation_matrixes[0], dtype=float).reshape(4, 4)
+        matrix = result.faces[0].transformation_matrix
         pitch, yaw, roll = rotation_to_angles(matrix[:3, :3])
         if not self.calibrated:
             return AttentionEstimate("unknown", yaw, pitch, roll, "Lipsește calibrarea cameră/ecran.")

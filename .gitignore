@@ -16,3 +16,4 @@ exports/
 /results
 
 archive.zip
+models/*.task
