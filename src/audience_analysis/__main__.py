@@ -54,7 +54,7 @@ def main() -> int:
     parser.add_argument("--sample-interval", type=float, default=1.0, help="video: secunde între cadre (implicit 1)")
     parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")
     parser.add_argument("--face-landmarker-model", type=Path, help="cale locală la fișierul MediaPipe .task")
-    parser.add_argument("--calibrated", action="store_true", help="permite clasificarea orientării capului după calibrare externă")
+    parser.add_argument("--calibrated", action="store_true", help="opțiune istorică; pentru calibrare neutră folosește scriptul foto --neutral-image")
     parser.add_argument("--config", type=Path, help="configurație pentru demo-ul istoric")
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--demo", action="store_true", help="UI + motor P2 + FakePredictor (istoric)")

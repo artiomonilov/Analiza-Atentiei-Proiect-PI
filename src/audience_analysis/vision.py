@@ -1,9 +1,10 @@
 """Detecție locală de față și orientare cap opțională prin MediaPipe."""
 from dataclasses import dataclass
-from math import atan2, degrees, sqrt
 from pathlib import Path
 
 import numpy as np
+
+from .head_pose import HeadPoseEstimator, extract_rotation, rotation_angles
 
 
 @dataclass(frozen=True)
@@ -66,7 +67,9 @@ class MediaPipeHeadPose:
     """Folosește Face Landmarker numai cu un model `.task` furnizat explicit."""
 
     def __init__(self, model_path: Path | None, *, calibrated: bool = False, yaw_limit: float = 25, pitch_limit: float = 20):
-        self.calibrated, self.yaw_limit, self.pitch_limit = calibrated, yaw_limit, pitch_limit
+        # Argumentele istorice sunt păstrate pentru compatibilitate. Un bool
+        # nu definește o poziție neutră și nu permite estimarea privirii.
+        self.pose_estimator = HeadPoseEstimator()
         self.landmarker = None
         self.unavailable_reason = "Modelul MediaPipe Face Landmarker nu a fost furnizat."
         if model_path is None:
@@ -88,11 +91,12 @@ class MediaPipeHeadPose:
         if not result.faces or result.faces[0].transformation_matrix is None:
             return AttentionEstimate("unknown", reason="MediaPipe nu a returnat repere faciale.")
         matrix = result.faces[0].transformation_matrix
-        pitch, yaw, roll = rotation_to_angles(matrix[:3, :3])
-        if not self.calibrated:
-            return AttentionEstimate("unknown", yaw, pitch, roll, "Lipsește calibrarea cameră/ecran.")
-        status = "toward_screen" if abs(yaw) <= self.yaw_limit and abs(pitch) <= self.pitch_limit else "away_from_screen"
-        return AttentionEstimate(status, yaw, pitch, roll)
+        pose = self.pose_estimator.estimate(matrix)
+        return AttentionEstimate("unknown", pose.yaw, pose.pitch, pose.roll,
+                                 pose.reason or "Orientarea capului nu clasifică atenția sau privirea.")
+
+    def calibrate(self, neutral_matrix: np.ndarray) -> None:
+        self.pose_estimator.calibrate(neutral_matrix)
 
     def close(self) -> None:
         if self.landmarker is not None:
@@ -100,9 +104,8 @@ class MediaPipeHeadPose:
 
 
 def rotation_to_angles(rotation: np.ndarray) -> tuple[float, float, float]:
-    """Întoarce pitch, yaw, roll în grade; nu echivalează cu direcția privirii."""
-    sy = sqrt(rotation[0, 0] ** 2 + rotation[1, 0] ** 2)
-    pitch = degrees(atan2(rotation[2, 1], rotation[2, 2]))
-    yaw = degrees(atan2(-rotation[2, 0], sy))
-    roll = degrees(atan2(rotation[1, 0], rotation[0, 0]))
+    """Compatibilitate: ordinea istorică pitch,yaw,roll; elimină și scalarea."""
+    matrix = np.eye(4)
+    matrix[:3, :3] = rotation
+    yaw, pitch, roll, _ = rotation_angles(extract_rotation(matrix))
     return pitch, yaw, roll

@@ -25,7 +25,7 @@ Pentru pornire simplă pe Windows există și launcherul `start-analysis.ps1`. F
 
 Modelul [jihedjabnoun/vit-face-emotion-recognition](https://huggingface.co/jihedjabnoun/vit-face-emotion-recognition) este încărcat local o dată pe proces pentru fața principală (cea mai mare casetă YuNet). Pentru videoclip, consola afișează frecvența expresiilor; `summary.json`, `frames.csv`, `windows.csv` și `errors.log` sunt salvate în directorul indicat. La prima rulare modelul poate necesita internet, apoi folosește cache-ul local.
 
-Modelul are șapte clase (`Anger`, `Disgust`, `Fear`, `Happiness`, `Neutral`, `Sadness`, `Surprise`) și se așteaptă la o față clară, proeminentă în imagine. MediaPipe Face Landmarker este opțional și necesită un fișier local `.task`: `--face-landmarker-model C:\cale\face_landmarker.task`. Fără model sau fără calibrare, pipeline-ul raportează `unknown` pentru atenție; unghiurile capului nu sunt prezentate ca direcție exactă a privirii. Modelul de angajament DAiSEE nu este furnizat, prin urmare rezultatul rămâne explicit „Model de angajament indisponibil”.
+Modelul are șapte clase (`Anger`, `Disgust`, `Fear`, `Happiness`, `Neutral`, `Sadness`, `Surprise`) și se așteaptă la o față clară, proeminentă în imagine. MediaPipe Face Landmarker este opțional și necesită un fișier local `.task`: `--face-landmarker-model C:\cale\face_landmarker.task`. Adaptorul furnizează unghiurile geometrice ale capului și păstrează `unknown` pentru atenție. Modelul de angajament DAiSEE nu este furnizat, prin urmare rezultatul rămâne explicit „Model de angajament indisponibil”.
 
 ## MediaPipe Face Landmarker pe o fotografie
 
@@ -43,7 +43,13 @@ La o față detectată, consola afișează numărul de fețe procesate (maximum 
 
 API: `with FaceLandmarker(model_path) as detector: result = detector.process(frame_bgr)`. `result.faces` conține landmarks `(x,y,z)`, blendshapes `(name,score)` și `transformation_matrix` sau `None`. Randarea este separată prin `draw_landmarks`. Importul modulului nu pornește MediaPipe; modelul se încarcă la construirea detectorului și se eliberează la ieșirea din `with`.
 
-Aceste rezultate sunt geometrie și coeficienți faciali. Matricea nu reprezintă direct yaw/pitch/roll; conversiile viitoare necesită convenții de coordonate și calibrare. Scriptul foto nu calculează atenția. Modul IMAGE nu urmărește temporal fața; extensia la video va necesita modul VIDEO și timestamp-uri monotone. Verificări și limite: [docs/face-landmarker-verification.md](docs/face-landmarker-verification.md).
+Etapa 2 adaugă `head_pose.py`: rotația este separată prin SVD de scalare și translație, apoi convertită în yaw/pitch/roll în grade. Scriptul afișează unghiurile în consolă și peste fotografie. Pentru calibrare neutră:
+
+```powershell
+.\.venv\Scripts\python.exe test_face_landmarker.py --input "data/test/img1.jpg" --neutral-image "data/test/neutral.jpg" --output "results/head_pose.png"
+```
+
+Convențiile axelor, ordinea rotațiilor, semnele, calibrarea și limitele sunt în [docs/head-pose.md](docs/head-pose.md). Fără o matrice validă, unghiurile rămân indisponibile. Scriptul foto nu calculează atenția. Modul IMAGE nu urmărește temporal fața; extensia la video va necesita modul VIDEO și timestamp-uri monotone. Verificarea inițială MediaPipe: [docs/face-landmarker-verification.md](docs/face-landmarker-verification.md).
 
 ## Task 04 — mini-template comun P1/P2/P3
 
