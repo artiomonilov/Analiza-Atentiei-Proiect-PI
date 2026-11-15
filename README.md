@@ -51,6 +51,17 @@ Etapa 2 adaugă `head_pose.py`: rotația este separată prin SVD de scalare și 
 
 Convențiile axelor, ordinea rotațiilor, semnele, calibrarea și limitele sunt în [docs/head-pose.md](docs/head-pose.md). Fără o matrice validă, unghiurile rămân indisponibile. Scriptul foto nu calculează atenția. Modul IMAGE nu urmărește temporal fața; extensia la video va necesita modul VIDEO și timestamp-uri monotone. Verificarea inițială MediaPipe: [docs/face-landmarker-verification.md](docs/face-landmarker-verification.md).
 
+## Etapa 3 — ochi, EAR și poziția aproximativă a irisului
+
+`eye_features.py` reutilizează reperele deja extrase. Returnează separat pentru fiecare ochi EAR, centrul și poziția relativă a irisului, plus abaterile față de o referință neutră. Etichetele left/right sunt ale subiectului. Scriptul foto afișează aceste valori, head pose și contururile ochilor peste imagine:
+
+```powershell
+.\.venv\Scripts\python.exe test_face_landmarker.py --input "data/test/img1.jpg" --output "results/eyes.png"
+.\.venv\Scripts\python.exe test_face_landmarker.py --input "data/test/img1.jpg" --neutral-image "data/test/neutral.jpg" --output "results/eyes_calibrated.png"
+```
+
+`--min-open-ratio` permite o limită individuală opțională EAR/EAR_neutru pentru disponibilitatea irisului; nu există prag universal de clipire. Geometria insuficientă sau lipsa feței produce valori indisponibile. API-ul `vision.MediaPipeHeadPose.geometry` returnează head pose și ochi dintr-o singură inferență. Formule, indicii oficiali, calibrare și limitări: [docs/eye-features.md](docs/eye-features.md).
+
 ## Task 04 — mini-template comun P1/P2/P3
 
 Livrarea din 15 octombrie 2026 este un **schelet executabil cu simulări explicite**, nu MVP-ul cu model antrenat. Demo-urile nu folosesc oameni, camere, rețea, dataset sau ponderi. Nu se face antrenare. Datele simulate nu sunt rezultate experimentale.

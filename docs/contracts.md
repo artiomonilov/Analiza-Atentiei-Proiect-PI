@@ -46,6 +46,8 @@ Contractele vechi sunt păstrate în `legacy_contracts.py`, iar fereastra anteri
 
 ## Pipeline CLI experimental
 
+Etapa 3: `EyeFeaturesEstimator.estimate(face, (width, height)) -> EyesResult(left, right)` reutilizează `FaceLandmarks`. Rezultatele păstrează EAR, centrul irisului în imagine și poziția în reperul ochiului separat; valorile lipsă sunt `None`. Calibrarea este individuală pentru fiecare ochi. `MediaPipeHeadPose.geometry(bgr) -> FacialGeometry(head_pose, eyes)` utilizează o singură inferență. Contractul geometric și convențiile sunt în `docs/eye-features.md`; nici EAR, nici poziția irisului nu produc clasificări ale atenției.
+
 `AnalysisPipeline` separă detecția, orientarea capului, expresiile și angajamentul. `FrameResult` păstrează timestamp-ul, numărul de fețe, starea feței, `AttentionEstimate`, distribuția expresiei, timpul de inferență și eroarea. `AnalysisResult` agregă numai cadrele disponibile și exportă `summary.json`, `frames.csv`, `windows.csv` și `errors.log`.
 
 YuNet selectează determinist cea mai mare față, fără identificare sau urmărire. Predictorul de expresii este încărcat o dată și primește numai decupajul acelei fețe. MediaPipe este activat doar cu un model `.task` indicat explicit; adaptorul returnează unghiurile din `head_pose.py`, păstrând direcția atenției `unknown`. `HeadPoseEstimator` extrage rotația prin SVD și permite calibrarea neutră prin `R_neutral.T @ R_current`; matricile indisponibile produc unghiuri `None`. Convențiile sunt descrise în `docs/head-pose.md`. `EngagementPredictor` are contractul `predict_clip(frames) -> EngagementResult`, dar predictorul instalat returnează explicit „Model de angajament indisponibil”; expresiile nu sunt convertite în angajament.

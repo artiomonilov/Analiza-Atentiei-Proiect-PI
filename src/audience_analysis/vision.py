@@ -4,7 +4,8 @@ from pathlib import Path
 
 import numpy as np
 
-from .head_pose import HeadPoseEstimator, extract_rotation, rotation_angles
+from .head_pose import HeadPose, HeadPoseEstimator, extract_rotation, rotation_angles
+from .eye_features import EyeFeaturesEstimator, EyesResult
 
 
 @dataclass(frozen=True)
@@ -21,6 +22,12 @@ class AttentionEstimate:
     pitch: float | None = None
     roll: float | None = None
     reason: str | None = None
+
+
+@dataclass(frozen=True)
+class FacialGeometry:
+    head_pose: HeadPose
+    eyes: EyesResult
 
 
 class YuNetFaceDetector:
@@ -70,6 +77,7 @@ class MediaPipeHeadPose:
         # Argumentele istorice sunt păstrate pentru compatibilitate. Un bool
         # nu definește o poziție neutră și nu permite estimarea privirii.
         self.pose_estimator = HeadPoseEstimator()
+        self.eye_estimator = EyeFeaturesEstimator()
         self.landmarker = None
         self.unavailable_reason = "Modelul MediaPipe Face Landmarker nu a fost furnizat."
         if model_path is None:
@@ -97,6 +105,17 @@ class MediaPipeHeadPose:
 
     def calibrate(self, neutral_matrix: np.ndarray) -> None:
         self.pose_estimator.calibrate(neutral_matrix)
+
+    def geometry(self, bgr: np.ndarray) -> FacialGeometry:
+        """Pose și ochi din aceeași inferență, fără reîncărcarea modelului."""
+        from .face_landmarker import validate_bgr
+        validate_bgr(bgr)
+        result = self.landmarker.process(bgr) if self.landmarker is not None else None
+        face = result.faces[0] if result and result.faces else None
+        return FacialGeometry(
+            self.pose_estimator.estimate(face.transformation_matrix if face else None),
+            self.eye_estimator.estimate(face, (bgr.shape[1], bgr.shape[0])),
+        )
 
     def close(self) -> None:
         if self.landmarker is not None:
