@@ -74,6 +74,17 @@ Convențiile axelor, ordinea rotațiilor, semnele, calibrarea și limitele sunt 
 
 Modelul implicit este `models/face_landmarker.task`; `--neutral-image` calibrează orientarea și ochii cu aceeași instanță. CSV-ul este opțional și trebuie să fie un fișier nou. Nu se înregistrează automat imagini sau video. Timestampuri, structură CSV, performanța măsurată și limite: [docs/video-processing.md](docs/video-processing.md).
 
+## Etapa 5 — ferestre temporale și evenimente geometrice
+
+`temporal_analysis.py` adaugă ferestre glisante de 5/10/30 secunde, mișcarea capului și irisurilor, clipiri cu histerezis și filtrare geometrică opțională. Istoricul este limitat, duratele folosesc timestampurile și datele lipsă nu sunt interpolate. Clipirile necesită praguri EAR individuale; exemplul de configurare le păstrează dezactivate.
+
+```powershell
+.\.venv\Scripts\python.exe run_video_analysis.py --source 0 --show-temporal --temporal-config configs/temporal.example.json
+.\.venv\Scripts\python.exe run_video_analysis.py --source "data/test/video.mp4" --no-display --output-temporal-csv "results/temporal.csv" --output-blinks-csv "results/blinks.csv"
+```
+
+Exportul temporal și exportul clipirilor sunt independente de CSV-ul brut `--output-csv`. Evenimentele automate sunt etichetate ca nevalidate experimental. Configurare, formule, calibrare și comparare cu referințe manuale: [docs/temporal-analysis.md](docs/temporal-analysis.md).
+
 ## Task 04 — mini-template comun P1/P2/P3
 
 Livrarea din 15 octombrie 2026 este un **schelet executabil cu simulări explicite**, nu MVP-ul cu model antrenat. Demo-urile nu folosesc oameni, camere, rețea, dataset sau ponderi. Nu se face antrenare. Datele simulate nu sunt rezultate experimentale.

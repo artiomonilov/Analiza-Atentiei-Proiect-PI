@@ -206,3 +206,38 @@ def test_gui_error_is_reported_and_resources_are_released(session, monkeypatch):
     with pytest.raises(RuntimeError, match="no-display"):
         VideoProcessor(session.model).run(session.source)
     assert session.closed == 1 and session.released
+
+
+def test_temporal_integration_csv_and_no_additional_inference(session, tmp_path):
+    import json
+    from audience_analysis.temporal_analysis import BlinkThresholds, TemporalConfig
+    stats_path, events_path = tmp_path / "temporal.csv", tmp_path / "blinks.csv"
+    updates = []
+    report = VideoProcessor(session.model, temporal_config=TemporalConfig(left_blink=BlinkThresholds(.1, .2))).run(
+        session.source, display=False, output_temporal_csv=stats_path, output_blinks_csv=events_path,
+        on_temporal=updates.append)
+    assert session.calls == [0, 40, 80] and session.initialized == 1
+    assert len(updates) == 3 and report.temporal is updates[-1]
+    rows = list(csv.DictReader(stats_path.open(encoding="utf-8")))
+    assert len(rows) == 9 and json.loads(rows[0]["head_json"])["mean"] is None
+    assert len(list(csv.DictReader(events_path.open(encoding="utf-8")))) == 0
+
+
+def test_video_exports_completed_synthetic_blink(session, tmp_path):
+    from dataclasses import replace
+    from audience_analysis.temporal_analysis import BlinkThresholds, TemporalConfig
+    face = face_fixture()
+    points = list(face.landmarks)
+    for six in (LEFT_EAR, RIGHT_EAR):
+        for index in (six[1], six[2], six[4], six[5]):
+            point = points[index]
+            points[index] = replace(point, y=.5 + (point.y - .5) / 3)
+    closed = replace(face, landmarks=tuple(points))
+    session.outcomes = [LandmarkerResult((face,)), LandmarkerResult((closed,)), LandmarkerResult((face,))]
+    path = tmp_path / "events.csv"
+    report = VideoProcessor(session.model, temporal_config=TemporalConfig(left_blink=BlinkThresholds(.15, .22))).run(
+        session.source, display=False, output_blinks_csv=path)
+    rows = list(csv.DictReader(path.open(encoding="utf-8")))
+    assert len(rows) == 1 and rows[0]["start_ms"] == "40" and rows[0]["end_ms"] == "80"
+    assert rows[0]["duration_ms"] == "40" and rows[0]["validation_status"] == "automatic_unvalidated"
+    assert report.temporal.blink_totals["left"] == 1

@@ -46,6 +46,8 @@ Contractele vechi sunt păstrate în `legacy_contracts.py`, iar fereastra anteri
 
 ## Pipeline CLI experimental
 
+Etapa 5: `TemporalAnalyzer.update(VideoMeasurement | TemporalSample) -> TemporalUpdate` furnizează ferestre, geometrie filtrată și evenimente noi, fără inferență. Istoricul și evenimentele sunt limitate temporal și numeric. `VideoProcessor` expune `on_temporal`, `VideoSessionReport.temporal` și exporturi CSV temporale independente. `BlinkEvent` este un eveniment automat nevalidat experimental, separat per ochi. Configurația, disponibilitatea statisticilor și limitele sunt descrise în `docs/temporal-analysis.md`.
+
 Etapa 4: `FaceLandmarker(..., mode="VIDEO").process_video(frame_bgr, timestamp_ms)` păstrează contractul `LandmarkerResult` și cere milisecunde întregi strict crescătoare. Modul IMAGE rămâne implicit. `VideoProcessor.run(source, ...)` produce incremental `VideoMeasurement` prin callback/CSV și returnează `VideoSessionReport`; nu acumulează cadre sau rezultate. Proveniența timestampurilor și disponibilitatea măsurătorilor sunt exportate explicit. Detalii: `docs/video-processing.md`.
 
 Etapa 3: `EyeFeaturesEstimator.estimate(face, (width, height)) -> EyesResult(left, right)` reutilizează `FaceLandmarks`. Rezultatele păstrează EAR, centrul irisului în imagine și poziția în reperul ochiului separat; valorile lipsă sunt `None`. Calibrarea este individuală pentru fiecare ochi. `MediaPipeHeadPose.geometry(bgr) -> FacialGeometry(head_pose, eyes)` utilizează o singură inferență. Contractul geometric și convențiile sunt în `docs/eye-features.md`; nici EAR, nici poziția irisului nu produc clasificări ale atenției.

@@ -1,0 +1,19 @@
+{
+  "windows_s": [5, 10, 30],
+  "max_samples": 10000,
+  "max_events": 1000,
+  "max_gap_ms": 500,
+  "min_blink_ms": 40,
+  "max_blink_ms": 800,
+  "min_rate_duration_ms": 10000,
+  "left_blink": null,
+  "right_blink": null,
+  "head_stable_deg": 2.0,
+  "head_change_deg": 10.0,
+  "gaze_stable_distance": 0.02,
+  "gaze_change_distance": 0.15,
+  "smoothing": "none",
+  "smoothing_ms": 200,
+  "head_deadband_deg": 0,
+  "gaze_deadband": 0
+}
