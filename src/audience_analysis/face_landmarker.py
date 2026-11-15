@@ -1,4 +1,4 @@
-"""MediaPipe Tasks IMAGE: landmarks, blendshapes și transformarea facială brută."""
+"""MediaPipe Tasks IMAGE/VIDEO: landmarks, blendshapes și matrice facială."""
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -47,7 +47,9 @@ class FaceLandmarker:
     este o transformare facială 4x4, nu o măsurare a privirii sau a atenției.
     """
 
-    def __init__(self, model_path: Path):
+    def __init__(self, model_path: Path, *, mode: str = "IMAGE"):
+        if mode not in {"IMAGE", "VIDEO"}:
+            raise ValueError("Modul Face Landmarker trebuie să fie IMAGE sau VIDEO.")
         model_path = Path(model_path)
         if not model_path.is_file():
             raise FileNotFoundError(f"Modelul Face Landmarker nu există: {model_path}")
@@ -55,7 +57,7 @@ class FaceLandmarker:
             import mediapipe as mp
             options = mp.tasks.vision.FaceLandmarkerOptions(
                 base_options=mp.tasks.BaseOptions(model_asset_path=str(model_path.resolve())),
-                running_mode=mp.tasks.vision.RunningMode.IMAGE,
+                running_mode=getattr(mp.tasks.vision.RunningMode, mode),
                 num_faces=1,
                 output_face_blendshapes=True,
                 output_facial_transformation_matrixes=True,
@@ -65,15 +67,34 @@ class FaceLandmarker:
         except (ImportError, OSError, RuntimeError, ValueError) as error:
             raise FaceLandmarkerError(f"Inițializarea Face Landmarker a eșuat: {error}") from error
         self._closed = False
+        self.mode = mode
+        self._last_timestamp_ms = -1
 
     def process(self, image_bgr: np.ndarray) -> LandmarkerResult:
+        if self.mode != "IMAGE":
+            raise FaceLandmarkerError("Instanța VIDEO necesită process_video și timestamp_ms.")
+        return self._process(image_bgr)
+
+    def process_video(self, image_bgr: np.ndarray, timestamp_ms: int) -> LandmarkerResult:
+        if self.mode != "VIDEO":
+            raise FaceLandmarkerError("process_video necesită o instanță VIDEO.")
+        if type(timestamp_ms) is not int or timestamp_ms < 0 or timestamp_ms <= self._last_timestamp_ms:
+            raise ValueError("Timestampurile VIDEO trebuie să fie întregi, nenegative și strict crescătoare.")
+        return self._process(image_bgr, timestamp_ms)
+
+    def _process(self, image_bgr: np.ndarray, timestamp_ms: int | None = None) -> LandmarkerResult:
         validate_bgr(image_bgr)
         if self._closed:
             raise FaceLandmarkerError("Face Landmarker este deja închis.")
         # Copie contiguă: inversarea canalelor produce altfel strides negative.
         rgb = np.ascontiguousarray(image_bgr[:, :, ::-1])
         try:
-            raw = self._landmarker.detect(self._mp.Image(image_format=self._mp.ImageFormat.SRGB, data=rgb))
+            image = self._mp.Image(image_format=self._mp.ImageFormat.SRGB, data=rgb)
+            if timestamp_ms is None:
+                raw = self._landmarker.detect(image)
+            else:
+                self._last_timestamp_ms = timestamp_ms
+                raw = self._landmarker.detect_for_video(image, timestamp_ms)
         except (RuntimeError, ValueError) as error:
             raise FaceLandmarkerError(f"Procesarea Face Landmarker a eșuat: {error}") from error
         faces = []

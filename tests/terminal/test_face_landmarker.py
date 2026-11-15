@@ -17,17 +17,21 @@ def fake_mp(monkeypatch, tmp_path):
 
     def create(options):
         state.options = options
-        return NS(detect=detect, close=close)
+        return NS(detect=detect, detect_for_video=detect_video, close=close)
 
     def detect(image):
         state.rgb = image.data
         return state.raw
 
+    def detect_video(image, timestamp):
+        state.timestamp = timestamp
+        return detect(image)
+
     def close():
         state.closed += 1
 
     mp = NS(tasks=NS(BaseOptions=lambda **kw: NS(**kw), vision=NS(
-        FaceLandmarkerOptions=lambda **kw: NS(**kw), RunningMode=NS(IMAGE="IMAGE"),
+        FaceLandmarkerOptions=lambda **kw: NS(**kw), RunningMode=NS(IMAGE="IMAGE", VIDEO="VIDEO"),
         FaceLandmarker=NS(create_from_options=create))), Image=lambda **kw: NS(**kw), ImageFormat=NS(SRGB="SRGB"))
     monkeypatch.setitem(sys.modules, "mediapipe", mp)
     state.path = tmp_path / "model.task"
@@ -46,6 +50,24 @@ def test_options_rgb_contiguity_and_no_face(fake_mp):
     assert fake_mp.rgb[0, 0].tolist() == [3, 2, 1]
     assert fake_mp.rgb.flags.c_contiguous
     assert fake_mp.closed == 1
+
+
+def test_video_mode_enforces_strict_timestamps_and_photo_compatibility(fake_mp):
+    frame = np.zeros((3, 4, 3), np.uint8)
+    with FaceLandmarker(fake_mp.path, mode="VIDEO") as detector:
+        assert detector.process_video(frame, 0).faces == ()
+        detector.process_video(frame, 40)
+        assert fake_mp.timestamp == 40
+        assert fake_mp.options.running_mode == "VIDEO"
+        for invalid in (40, 39, -1, 40.5):
+            with pytest.raises(ValueError):
+                detector.process_video(frame, invalid)
+        with pytest.raises(FaceLandmarkerError):
+            detector.process(frame)
+    with FaceLandmarker(fake_mp.path) as detector:
+        with pytest.raises(FaceLandmarkerError):
+            detector.process_video(frame, 0)
+        assert detector.process(frame).faces == ()
 
 
 def test_extracts_points_blendshapes_and_matrix(fake_mp):

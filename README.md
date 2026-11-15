@@ -62,6 +62,18 @@ Convențiile axelor, ordinea rotațiilor, semnele, calibrarea și limitele sunt 
 
 `--min-open-ratio` permite o limită individuală opțională EAR/EAR_neutru pentru disponibilitatea irisului; nu există prag universal de clipire. Geometria insuficientă sau lipsa feței produce valori indisponibile. API-ul `vision.MediaPipeHeadPose.geometry` returnează head pose și ochi dintr-o singură inferență. Formule, indicii oficiali, calibrare și limitări: [docs/eye-features.md](docs/eye-features.md).
 
+## Etapa 4 — fișiere video și webcam, geometrie facială
+
+`run_video_analysis.py` procesează sincron fiecare cadru cu o singură instanță MediaPipe VIDEO. Afișează head pose, ochi/irisuri, EAR, FPS de procesare și starea detecției. Q oprește sesiunea. Exemple:
+
+```powershell
+.\.venv\Scripts\python.exe run_video_analysis.py --source 0
+.\.venv\Scripts\python.exe run_video_analysis.py --source "data/test/video.mp4" --show-landmarks
+.\.venv\Scripts\python.exe run_video_analysis.py --source "data/test/video.mp4" --no-display --output-csv "results/measurements.csv"
+```
+
+Modelul implicit este `models/face_landmarker.task`; `--neutral-image` calibrează orientarea și ochii cu aceeași instanță. CSV-ul este opțional și trebuie să fie un fișier nou. Nu se înregistrează automat imagini sau video. Timestampuri, structură CSV, performanța măsurată și limite: [docs/video-processing.md](docs/video-processing.md).
+
 ## Task 04 — mini-template comun P1/P2/P3
 
 Livrarea din 15 octombrie 2026 este un **schelet executabil cu simulări explicite**, nu MVP-ul cu model antrenat. Demo-urile nu folosesc oameni, camere, rețea, dataset sau ponderi. Nu se face antrenare. Datele simulate nu sunt rezultate experimentale.
