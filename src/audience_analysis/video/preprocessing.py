@@ -1,18 +1,4 @@
-"""P2 — Detecția fețelor și pregătirea imaginilor pentru model.
 
-Conține:
-    DEFAULT_DETECTOR_PATH          calea modelului YuNet (audience_analysis/assets/)
-    prepare_bgr(image, config)     decupaj BGR -> tablou float32 [3, H, W] gata pentru model
-    FaceDetection                  rezultatul detecției pe UN cadru (toate fețele)
-    select_faces(image, boxes)     curăță casetele și face decupajele; NumPy pur, testabil fără model
-    select_face(...)               nume vechi pentru select_faces (compatibilitate)
-    FaceDetector                   detectorul YuNet (OpenCV); o instanță per fir
-    detect_real_face(image, det)   scurtătură pentru det.detect(image)
-
-Convenții:
-    - Caseta unei fețe = (x, y, w, h) în pixeli, în coordonatele cadrului întreg.
-    - Se detectează fețe, NU se recunosc persoane.
-"""
 from dataclasses import dataclass
 from pathlib import Path
 

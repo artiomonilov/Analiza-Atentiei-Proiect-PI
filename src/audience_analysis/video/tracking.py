@@ -1,14 +1,4 @@
-"""P2 — Urmărirea anonimă a fețelor între cadre.
 
-Fiecare față primește un număr (track_id) cât timp rămâne în cadru. Nu recunoaște persoane: o față
-care iese din cadru mai mult de `max_missed_s` și revine primește un număr nou.
-Python pur, deci testabil fără OpenCV.
-
-Conține:
-    Box                  tip: caseta (x, y, w, h)
-    iou(a, b) -> float   cât de mult se suprapun două casete (0 = deloc, 1 = identice)
-    FaceTracker          asociază casetele cadrului curent cu fețele urmărite deja
-"""
 from dataclasses import dataclass
 
 Box = tuple[int, int, int, int]

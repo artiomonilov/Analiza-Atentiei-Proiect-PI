@@ -1,14 +1,4 @@
-"""P2 — Firele de lucru ale motorului.
 
-Conține:
-    PreviewStore      păstrează ultimul cadru de previzualizare per sursă (cu chenarele fețelor)
-    FACE_PROBLEMS     stările în care nu se poate analiza nimic (NO_FACE, LOW_QUALITY)
-    FACE_MESSAGES     textul trimis în UI pentru fiecare dintre aceste stări
-    SourceWorker      un fir per sursă: citește, detectează, urmărește fețe, formează secvențe
-    InferenceWorker   un singur fir AI: ia cereri din coadă, cheamă predictorul, emite rezultate
-
-Niciun modul engine nu importă QtWidgets; comunicarea cu UI trece prin EngineController.
-"""
 from collections.abc import Callable
 from threading import Event, Lock
 import time
@@ -20,7 +10,7 @@ from ..config import SequenceConfig
 from ..contracts import FramePacket, InferenceRequest, ModelOutput, PredictionResult, Predictor, SourceConfig, SourceStatusEvent, Status
 from ..video.sequences import SequenceBuilder
 from ..video.preprocessing import FaceDetector
-from ..video.sources import open_real_source, synthetic_frame
+from ..video.sources import open_real_source, redact, synthetic_frame
 from ..video.tracking import FaceTracker
 from .scheduler import LatestScheduler
 
@@ -66,11 +56,14 @@ FACE_MESSAGES = {
 class SourceWorker(QThread):
     """Firul unei surse: citește cadre, detectează și urmărește fețele, formează secvențe și le trimite în coadă."""
     status = Signal(object)
+    # Pauzele (s) dintre încercările de reconectare ale unei camere/unui flux căzut; după ultima -> ERROR.
+    RECONNECT_DELAYS_S = (1.0, 2.0, 4.0, 8.0, 8.0)
 
     def __init__(self, source: SourceConfig, run_id: str, config: SequenceConfig,
                  scheduler: LatestScheduler, previews: PreviewStore, *, duration_s: float = 30.0,
-                 detector_factory: Callable[[], object] | None = None):
+                 detector_factory: Callable[[], object] | None = None, stats=None):
         super().__init__()
+        self.stats = stats  # EngineStats (opțional): contoare pentru P2-S4.3
         self.source, self.run_id, self.config = source, run_id, config
         self.scheduler, self.previews = scheduler, previews
         self.duration_s = duration_s  # se aplică numai sursei demo; un fișier rulează până la EOF
@@ -104,6 +97,8 @@ class SourceWorker(QThread):
         request = InferenceRequest(packet.source_id, packet.run_id, request_id, sequence.sample_times_s[0],
                                    sequence.sample_times_s[-1], time.monotonic(), sequence, track_id)
         self.scheduler.submit(request)
+        if self.stats:
+            self.stats.submitted(packet.source_id, packet.run_id)
         return True
 
     @staticmethod
@@ -123,6 +118,32 @@ class SourceWorker(QThread):
                 faces += f" ({usable} suficient de mari pentru analiză)"
         return f"Imagine statică — {faces}; estimarea angajamentului necesită video"
 
+    def _reconnect(self, old, builders: dict[int, SequenceBuilder], tracker: FaceTracker, origin: float):
+        """P2-S5.4: redeschide o cameră/un flux căzut. Întoarce sursa nouă sau None dacă s-a cerut oprirea.
+
+        Secvențele și urmăririle de dinainte de întrerupere sunt aruncate: cadrele de după nu continuă
+        aceeași fereastră. ConnectionError dacă toate încercările eșuează.
+        """
+        old.close()
+        builders.clear()
+        tracker.reset()
+        name = getattr(old, "name", redact(self.source.location))
+        total = len(self.RECONNECT_DELAYS_S)
+        for attempt, delay in enumerate(self.RECONNECT_DELAYS_S, 1):
+            self.emit_status(Status.INSUFFICIENT_DATA,
+                             f"Conexiune pierdută cu {name}; reconectare în {delay:g} s (încercarea {attempt}/{total})")
+            if self.stop_event.wait(delay):
+                return None
+            try:
+                reader = open_real_source(self.source, clock_origin=origin)
+            except (ConnectionError, OSError, ValueError):
+                continue
+            self.emit_status(Status.INSUFFICIENT_DATA, f"Reconectat la {name}; se formează secvențele")
+            if self.stats:
+                self.stats.reconnect(self.source.source_id, self.run_id)
+            return reader
+        raise ConnectionError(f"{name} nu răspunde după {total} încercări de reconectare")
+
     def run(self) -> None:
         """Bucla firului (pornită de QThread.start())."""
         real = self.source.kind != "demo"
@@ -130,34 +151,53 @@ class SourceWorker(QThread):
         builders: dict[int, SequenceBuilder] = {}  # un istoric separat pentru fiecare față urmărită
         tracker = FaceTracker()
         reader = detector = detection = None
+        live = False  # cameră/rețea: fără sfârșit, timp după ceas, reconectare la pierderea conexiunii
         frame_index, request_id = 0, 0
+        origin = time.monotonic()  # timpul 0 pentru sursele live, păstrat și după reconectare
         try:
             if real:
-                reader = open_real_source(self.source)
+                reader = open_real_source(self.source, clock_origin=origin)
+                live = getattr(reader, "live", False)
                 detector = (self.detector_factory or FaceDetector)()
             self.emit_status(Status.INSUFFICIENT_DATA,
                              "Se formează secvențele" if real else "SIMULARE: se formează secvența; nu se detectează fețe")
             anchor = time.monotonic()
             while not self.stop_event.is_set():
-                if real:
+                if live:
+                    try:
+                        item = reader.read(self.stop_event)
+                    except ConnectionError:
+                        old, reader = reader, None
+                        reader = self._reconnect(old, builders, tracker, origin)
+                        if reader is None:
+                            break  # oprire cerută în timpul reconectării
+                        continue
+                elif real:
                     item = reader.read()
                 else:
                     media_time = frame_index / 20.0
                     item = (frame_index, media_time, None) if media_time <= self.duration_s else None
                 if item is None:
+                    if self.stop_event.is_set():
+                        break
                     self.emit_status(Status.END_OF_SOURCE, self._end_message(real, reader, frame_index, detection))
                     break
                 frame_id, media_time, image = item
                 frame_index += 1
-                if self.stop_event.wait(max(0.0, anchor + media_time - time.monotonic())):
+                # Fișier/demo: redare în ritmul videoclipului. Live: cadrele vin deja în timp real.
+                if self.stop_event.wait(0.0 if live else max(0.0, anchor + media_time - time.monotonic())):
                     break
                 if not real:
                     packet = synthetic_frame(self.source.source_id, self.run_id, frame_id, media_time)
                     self.previews.put(packet)
+                    if self.stats:
+                        self.stats.frame(self.source.source_id, self.run_id, Status.OK)
                     if self._submit(demo_builder.add(packet), packet, request_id, None):
                         request_id += 1
                     continue
                 detection = detector.detect(image)
+                if self.stats:
+                    self.stats.frame(self.source.source_id, self.run_id, detection.status)
                 track_ids, ended = tracker.update(detection.boxes, media_time)
                 for track_id in ended:
                     builders.pop(track_id, None)
@@ -172,8 +212,11 @@ class SourceWorker(QThread):
                     packet = FramePacket(self.source.source_id, self.run_id, frame_id, media_time, crop)
                     if self._submit(builder.add(packet), packet, request_id, track_id):
                         request_id += 1
+        except ConnectionError as error:
+            # Mesajele ConnectionError sunt construite de LiveSource/_reconnect cu adresa ascunsă (redact).
+            self.emit_status(Status.ERROR, str(error))
         except Exception:
-            self.emit_status(Status.ERROR, "Eroare în sursa video; verifică fișierul și modelul de detecție")
+            self.emit_status(Status.ERROR, "Eroare în sursa video; verifică sursa și modelul de detecție")
         finally:
             demo_builder.clear()
             builders.clear()

@@ -1,11 +1,4 @@
-"""P2 — Coada de cereri către model și filtrul de rezultate.
 
-Conține:
-    LatestScheduler   coada: o cerere în așteptare per (sursă, față); cea veche este înlocuită
-    ResultGate        acceptă un rezultat doar dacă e din rularea curentă și mai nou decât ultimul
-
-Firul sursei scrie în coadă (submit), firul AI citește (take); ambele folosesc aceeași încuietoare.
-"""
 from collections import deque
 from threading import Condition
 
@@ -96,6 +89,11 @@ class LatestScheduler:
         """request_id-ul ultimei cereri acceptate pentru sursă, sau -1."""
         with self.condition:
             return self.last_submitted.get(source_id, -1)
+
+    def replaced_counts(self) -> dict[str, int]:
+        """Câte cereri au fost înlocuite înainte de model, per sursă (cumulat de la pornirea motorului)."""
+        with self.condition:
+            return dict(self.replaced)
 
     def pending_counts(self) -> dict[str, int]:
         """Câte cereri așteaptă acum, per sursă (pentru teste și diagnoză)."""

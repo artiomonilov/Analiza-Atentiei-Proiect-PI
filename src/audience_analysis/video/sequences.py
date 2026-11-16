@@ -1,11 +1,4 @@
-"""P2 — Formarea secvențelor temporale pentru model.
 
-Conține:
-    SequenceBuilder   păstrează ultimele cadre ale UNEI fețe (sau ale sursei demo) și scoate din când
-                      în când o PreparedSequence: config.frames cadre egal distanțate pe config.window_seconds
-
-Istoricul de aici este separat de coada AI: istoricul se tot schimbă, secvența scoasă este o copie.
-"""
 from collections import deque
 
 import numpy as np

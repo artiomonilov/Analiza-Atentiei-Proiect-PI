@@ -1,11 +1,4 @@
-"""P2 — EngineController: punctul unic prin care UI-ul (P3) vorbește cu motorul.
 
-Comenzi (din firul principal Qt): add_source, start_source, stop_source, remove_source,
-                                  shutdown, take_latest_preview
-Semnale către UI:                 result_ready(PredictionResult), status_changed(SourceStatusEvent),
-                                  shutdown_finished()
-Creează QApplication/QCoreApplication înaintea controllerului.
-"""
 from collections.abc import Callable
 from uuid import uuid4
 
@@ -14,6 +7,7 @@ from PySide6.QtCore import QCoreApplication, QObject, Qt, Signal, Slot
 from ..config import SequenceConfig
 from ..contracts import FramePacket, PredictionResult, Predictor, SourceConfig, SourceStatusEvent, Status
 from .scheduler import LatestScheduler, ResultGate
+from .stats import EngineStats, format_report
 from .workers import InferenceWorker, PreviewStore, SourceWorker
 
 
@@ -35,6 +29,7 @@ class EngineController(QObject):
         self.active: dict[str, SourceWorker] = {}
         self.source_threads: list[SourceWorker] = []
         self.scheduler, self.gate, self.previews = LatestScheduler(), ResultGate(), PreviewStore()
+        self.engine_stats = EngineStats()  # P2-S4.3: timpi, cereri înlocuite, cadre fără față ...
         self.closing = False
         self._ending: dict[str, SourceStatusEvent] = {}  # END_OF_SOURCE amânat până sosește ultimul rezultat
         self._shutdown_emitted = False
@@ -47,8 +42,6 @@ class EngineController(QObject):
         """Înregistrează o sursă (nu o pornește)."""
         if self.closing:
             raise ValueError("Motor închis")
-        if config.kind not in {"demo", "file"}:
-            raise NotImplementedError("P2-S5.1: camera și fluxul de rețea nu sunt activate încă")
         existing = self.sources.get(config.source_id)
         if existing == config:
             raise ValueError("Identificator duplicat cu aceeași configurație")
@@ -69,8 +62,9 @@ class EngineController(QObject):
         self.gate.activate(source_id, run_id)
         self.scheduler.activate(source_id, run_id)
         self.previews.activate(source_id, run_id)
+        self.engine_stats.start_run(source_id, run_id, self.scheduler.replaced_counts().get(source_id, 0))
         worker = SourceWorker(source, run_id, self.config, self.scheduler, self.previews, duration_s=self.duration_s,
-                              detector_factory=self.detector_factory)
+                              detector_factory=self.detector_factory, stats=self.engine_stats)
         self.active[source_id] = worker
         self.source_threads.append(worker)
         worker.status.connect(self._accept_status, Qt.ConnectionType.QueuedConnection)
@@ -97,6 +91,14 @@ class EngineController(QObject):
         self.sources.pop(source_id, None)
         self.status_changed.emit(SourceStatusEvent(uuid4().hex, source_id, run_id, Status.REMOVED, "Sursă eliminată"))
 
+    def stats(self) -> list[dict]:
+        """P2-S4.3: statisticile rulării curente a fiecărei surse (un dicționar per sursă, ușor de exportat)."""
+        return self.engine_stats.snapshot(self.scheduler.replaced_counts())
+
+    def stats_report(self) -> str:
+        """Aceleași statistici ca text, gata de afișat în UI sau de copiat în raport."""
+        return format_report(self.stats())
+
     def take_latest_preview(self, source_id: str) -> FramePacket | None:
         """Ultimul cadru al sursei (imagine + face_boxes + track_ids), sau None dacă nu a venit unul nou. Chemat periodic de UI."""
         return self.previews.take(source_id)
@@ -107,7 +109,9 @@ class EngineController(QObject):
         if self.closing:
             return
         self.scheduler.complete(result.source_id, result.request_id)
-        if self.gate.accept(result):
+        accepted = self.gate.accept(result)
+        self.engine_stats.result(result, accepted)
+        if accepted:
             self.result_ready.emit(result)
         event = self._ending.get(result.source_id)
         if event is not None and not self._results_outstanding(result.source_id):
