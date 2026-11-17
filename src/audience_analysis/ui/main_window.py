@@ -18,14 +18,14 @@ class MainWindow(QMainWindow):
         self.history = ResultHistory()
         self._closing = False
         self._allow_close = False
-        self.setWindowTitle("Mini-template P1 / P2 / P3")
+        self.setWindowTitle("Analiza Atentiei si Angajamentul Audientei - P1 / P2 / P3")
         self.resize(720, 650)
         root = QWidget()
         self.setCentralWidget(root)
         layout = QVBoxLayout(root)
 
-        #banner simulare
-        self.banner = QLabel("SIMULARE — fără analiză AI reală")
+        #banner simulare SAU mod rulare
+        self.banner = QLabel("RULARE — selecteaza o sursa (demo sau video/imagine)")
         self.banner.setStyleSheet("background:#ffdc86; color:#292318; padding:12px; font-weight:bold;")
         layout.addWidget(self.banner)
 
@@ -39,8 +39,8 @@ class MainWindow(QMainWindow):
         #selector de fisier imagine
         img_layout = QHBoxLayout()
         self.input_source = QLineEdit("demo")
-        self.browse_button = QPushButton("Alege...")
-        self.browse_button.clicked.connect(self.browse_image)
+        self.browse_button = QPushButton("Alege fisier...")
+        self.browse_button.clicked.connect(self.browse_media)
         img_layout.addWidget(self.input_source)
         img_layout.addWidget(self.browse_button)
 
@@ -50,7 +50,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(source_box)
 
         #previzualizare imagine
-        self.preview = QLabel("Previzualizare sintetică — fără persoane")
+        self.preview = QLabel("Previzualizare indisponibila — alege o sursa si apasa 'Porneste'")
         self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.preview.setMinimumHeight(220)
         layout.addWidget(self.preview)
@@ -66,7 +66,7 @@ class MainWindow(QMainWindow):
         controls.addWidget(self.stop_button)
         layout.addLayout(controls)
 
-        self.status_label = QLabel("Pregătit pentru simulare")
+        self.status_label = QLabel("Model pregatit")
         self.result_label = QLabel("Rezultat: —")
         self.interval_label = QLabel("Interval analizat: —")
         for widget in (self.status_label, self.result_label, self.interval_label):
@@ -89,12 +89,12 @@ class MainWindow(QMainWindow):
         self.preview_timer.timeout.connect(self.refresh_preview)
         self.preview_timer.start()
 
-    def browse_image(self) -> None:
+    def browse_media(self) -> None:
         file_path, _ = QFileDialog.getOpenFileName(
             self,
-            "Selecteaza fisierul imagine",
+            "Selecteaza fisierul video sau imagine",
             "",
-            "Imagini (*.png *.jpg *.jpeg *.bmp);;Toate fisierele (*.*)"
+            "Media (*.mp4 *.avi *.mov *.mkv *.png *.jpg *.jpeg *.bmp);;Toate fisierele (*.*)"
         )
         if file_path:
             self.input_source.setText(file_path)
@@ -112,6 +112,14 @@ class MainWindow(QMainWindow):
         if not uri:
             QMessageBox.warning(self, "Eroare validare", "Fisierul/sursa lipseste.")
             return
+
+        #modul de rulare
+        if uri.lower() == "demo":
+            self.banner.setText("SIMULARE - fara analiza AI reala")
+            self.banner.setStyleSheet("background:#ffdc86; color:#292318; padding:12px; font-weight:bold;")
+        else:
+            self.banner.setText("ANALIZA AI — procesare prin motorul P2")
+            self.banner.setStyleSheet("background:#b7eb8f; color:#135200; padding:12px; font-weight:bold;")
 
         self.source = SourceConfig(source_id, display_name, uri)
         try:
@@ -148,29 +156,42 @@ class MainWindow(QMainWindow):
 
     @Slot(object)
     def on_result(self, result: PredictionResult) -> None:
-        if result.source_id != self.source.source_id or result.run_id != self.current_run or not result.is_demo:
+        if result.source_id != self.source.source_id or result.run_id != self.current_run:
             return
         if not self.history.add(result):
             return
-        levels = ", ".join(f"{name}: nivel {value}" for name, value in (result.levels or {}).items()) or "—"
+
+        mode_tag = "SIMULARE" if result.is_demo else "ANALIZA AI"
+        if result.is_demo:
+            self.banner.setText("SIMULARE — fara analiza AI reala")
+            self.banner.setStyleSheet("background:#ffdc86; color:#292318; padding:12px; font-weight:bold;")
+        else:
+            self.banner.setText("ANALIZA AI REALA — predictie din model")
+            self.banner.setStyleSheet("background:#b7eb8f; color:#135200; padding:12px; font-weight:bold;")
         
         if not result.levels:
-            levels = "- (fara predicitie / date insuficiente)"
+            reason = result.error_message or str(result.status)
+            levels = f"(fara predicitie / date insuficiente - {reason})"
+        else:
+            levels = ", ".join(f"{name}: nivel {value}" for name, value in result.levels.items())
         
-        self.result_label.setText(f"SIMULARE · {levels}")
+        self.result_label.setText(f"[{mode_tag}] · {levels}")
         interval = f"{result.window_start_s:.2f}–{result.window_end_s:.2f} s"
         self.interval_label.setText(f"Interval analizat: {interval} · separat de cadrul curent")
-        self.status_label.setText(f"{result.status}: {result.error_message or 'Rezultat simulat'}")
-        self.history_list.addItem(f"SIMULARE · cererea {result.request_id} · {interval} · {result.status} · {levels}")
+        self.status_label.setText(f"{result.status}: {result.error_message or 'Predictie primita'}")
+        self.history_list.addItem(f"[{mode_tag}] · cererea {result.request_id} · {interval} · {result.status} · {levels}")
 
     @Slot()
     def refresh_preview(self) -> None:
         packet = self.engine.take_latest_preview(self.source.source_id)
-        if packet is None or packet.run_id != self.current_run:
+        if packet is None or packet.run_id != self.current_run or packet.image is None:
             return
         frame = packet.image
+        if len(frame.shape) != 3 or frame.shape[2] < 3:
+            return
         image = QImage(frame.data, frame.shape[1], frame.shape[0], frame.strides[0], QImage.Format.Format_BGR888).copy()
         # copy() desprinde QImage de bufferul NumPy înainte ca pachetul să fie eliberat.
+
         self.preview.setPixmap(QPixmap.fromImage(image).scaled(480, 240, Qt.AspectRatioMode.KeepAspectRatio))
 
     def closeEvent(self, event) -> None:
