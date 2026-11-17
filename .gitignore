@@ -13,4 +13,8 @@ reports/
 exports/
 .env.*
 !.env.example
+/results
+/ImaginiAnaliza
 
+archive.zip
+models/*.task

@@ -2,6 +2,89 @@
 
 Prototip Python pentru **experimente pe materiale autorizate**, cu aplicație desktop, preprocesare comună și comparație R0/R1/R2. Etichetele estimate nu sunt măsurători ale atenției și nu sunt destinate evaluării sau monitorizării operaționale a studenților.
 
+## Interfață de terminal pentru cadre și videoclipuri
+
+Pipeline-ul rulează exclusiv în terminal, primește o imagine sau un videoclip local, citește videoclipul incremental și exportă rapoarte. Nu salvează imagini cu fețe și nu identifică persoane.
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -e ".[terminal,model,vision,dev]"
+
+# imagine
+.\.venv\Scripts\python.exe -m audience_analysis image --input C:\cale\către\frame.png --output-dir results\image
+
+# video, cu un cadru selectat pe secundă
+.\.venv\Scripts\python.exe -m audience_analysis video --input C:\cale\către\video.mp4 --sample-interval 1 --device auto --output-dir results\video
+```
+
+Pentru pornire simplă pe Windows există și launcherul `start-analysis.ps1`. Fără argumente, cere calea fișierului; detectează automat dacă este imagine sau videoclip și creează un director de rezultate cu dată/oră.
+
+```powershell
+.\start-analysis.ps1
+.\start-analysis.ps1 -InputPath "C:\cale\către\video.mp4" -SampleInterval 1
+```
+
+Modelul [jihedjabnoun/vit-face-emotion-recognition](https://huggingface.co/jihedjabnoun/vit-face-emotion-recognition) este încărcat local o dată pe proces pentru fața principală (cea mai mare casetă YuNet). Pentru videoclip, consola afișează frecvența expresiilor; `summary.json`, `frames.csv`, `windows.csv` și `errors.log` sunt salvate în directorul indicat. La prima rulare modelul poate necesita internet, apoi folosește cache-ul local.
+
+Modelul are șapte clase (`Anger`, `Disgust`, `Fear`, `Happiness`, `Neutral`, `Sadness`, `Surprise`) și se așteaptă la o față clară, proeminentă în imagine. MediaPipe Face Landmarker este opțional și necesită un fișier local `.task`: `--face-landmarker-model C:\cale\face_landmarker.task`. Adaptorul furnizează unghiurile geometrice ale capului și păstrează `unknown` pentru atenție. Modelul de angajament DAiSEE nu este furnizat, prin urmare rezultatul rămâne explicit „Model de angajament indisponibil”.
+
+## MediaPipe Face Landmarker pe o fotografie
+
+Modulul reutilizabil `audience_analysis.face_landmarker` este folosit atât de scriptul foto, cât și de adaptorul existent `MediaPipeHeadPose` din `vision.py`. Utilizează Tasks API în modul IMAGE, maximum o față, cu blendshapes și matricea facială activate. Modelul local se află în `models/face_landmarker.task`; fișierele `.task` sunt ignorate de Git și nu se descarcă automat. Un alt laptop trebuie să primească separat modelul compatibil, din sursa oficială [MediaPipe](https://developers.google.com/edge/mediapipe/solutions/vision/face_landmarker/python).
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -e ".[vision,dev]"
+.\.venv\Scripts\python.exe test_face_landmarker.py --input "data/test/img1.jpg"
+
+# căi configurabile, relative la directorul curent
+.\.venv\Scripts\python.exe test_face_landmarker.py --input "data/test/img1.jpg" --model "models/face_landmarker.task" --output "results/face_landmarker_result.png"
+```
+
+La o față detectată, consola afișează numărul de fețe procesate (maximum 1), numărul de landmarks (în mod normal 478), primele 10 blendshapes în ordinea scorurilor și matricea 4×4. Imaginea cu punctele verzi se salvează explicit la executarea scriptului; directorul de ieșire este creat automat. Dacă nu se detectează față, consola spune acest lucru și se salvează o copie fără puncte. O imagine lipsă/invalidă sau un model lipsă produce mesaj de eroare și cod de ieșire nenul. Fotografia originală nu poate fi aleasă ca ieșire.
+
+API: `with FaceLandmarker(model_path) as detector: result = detector.process(frame_bgr)`. `result.faces` conține landmarks `(x,y,z)`, blendshapes `(name,score)` și `transformation_matrix` sau `None`. Randarea este separată prin `draw_landmarks`. Importul modulului nu pornește MediaPipe; modelul se încarcă la construirea detectorului și se eliberează la ieșirea din `with`.
+
+Etapa 2 adaugă `head_pose.py`: rotația este separată prin SVD de scalare și translație, apoi convertită în yaw/pitch/roll în grade. Scriptul afișează unghiurile în consolă și peste fotografie. Pentru calibrare neutră:
+
+```powershell
+.\.venv\Scripts\python.exe test_face_landmarker.py --input "data/test/img1.jpg" --neutral-image "data/test/neutral.jpg" --output "results/head_pose.png"
+```
+
+Convențiile axelor, ordinea rotațiilor, semnele, calibrarea și limitele sunt în [docs/head-pose.md](docs/head-pose.md). Fără o matrice validă, unghiurile rămân indisponibile. Scriptul foto nu calculează atenția. Modul IMAGE nu urmărește temporal fața; extensia la video va necesita modul VIDEO și timestamp-uri monotone. Verificarea inițială MediaPipe: [docs/face-landmarker-verification.md](docs/face-landmarker-verification.md).
+
+## Etapa 3 — ochi, EAR și poziția aproximativă a irisului
+
+`eye_features.py` reutilizează reperele deja extrase. Returnează separat pentru fiecare ochi EAR, centrul și poziția relativă a irisului, plus abaterile față de o referință neutră. Etichetele left/right sunt ale subiectului. Scriptul foto afișează aceste valori, head pose și contururile ochilor peste imagine:
+
+```powershell
+.\.venv\Scripts\python.exe test_face_landmarker.py --input "data/test/img1.jpg" --output "results/eyes.png"
+.\.venv\Scripts\python.exe test_face_landmarker.py --input "data/test/img1.jpg" --neutral-image "data/test/neutral.jpg" --output "results/eyes_calibrated.png"
+```
+
+`--min-open-ratio` permite o limită individuală opțională EAR/EAR_neutru pentru disponibilitatea irisului; nu există prag universal de clipire. Geometria insuficientă sau lipsa feței produce valori indisponibile. API-ul `vision.MediaPipeHeadPose.geometry` returnează head pose și ochi dintr-o singură inferență. Formule, indicii oficiali, calibrare și limitări: [docs/eye-features.md](docs/eye-features.md).
+
+## Etapa 4 — fișiere video și webcam, geometrie facială
+
+`run_video_analysis.py` procesează sincron fiecare cadru cu o singură instanță MediaPipe VIDEO. Afișează head pose, ochi/irisuri, EAR, FPS de procesare și starea detecției. Q oprește sesiunea. Exemple:
+
+```powershell
+.\.venv\Scripts\python.exe run_video_analysis.py --source 0
+.\.venv\Scripts\python.exe run_video_analysis.py --source "data/test/video.mp4" --show-landmarks
+.\.venv\Scripts\python.exe run_video_analysis.py --source "data/test/video.mp4" --no-display --output-csv "results/measurements.csv"
+```
+
+Modelul implicit este `models/face_landmarker.task`; `--neutral-image` calibrează orientarea și ochii cu aceeași instanță. CSV-ul este opțional și trebuie să fie un fișier nou. Nu se înregistrează automat imagini sau video. Timestampuri, structură CSV, performanța măsurată și limite: [docs/video-processing.md](docs/video-processing.md).
+
+## Etapa 5 — ferestre temporale și evenimente geometrice
+
+`temporal_analysis.py` adaugă ferestre glisante de 5/10/30 secunde, mișcarea capului și irisurilor, clipiri cu histerezis și filtrare geometrică opțională. Istoricul este limitat, duratele folosesc timestampurile și datele lipsă nu sunt interpolate. Clipirile necesită praguri EAR individuale; exemplul de configurare le păstrează dezactivate.
+
+```powershell
+.\.venv\Scripts\python.exe run_video_analysis.py --source 0 --show-temporal --temporal-config configs/temporal.example.json
+.\.venv\Scripts\python.exe run_video_analysis.py --source "data/test/video.mp4" --no-display --output-temporal-csv "results/temporal.csv" --output-blinks-csv "results/blinks.csv"
+```
+
+Exportul temporal și exportul clipirilor sunt independente de CSV-ul brut `--output-csv`. Evenimentele automate sunt etichetate ca nevalidate experimental. Configurare, formule, calibrare și comparare cu referințe manuale: [docs/temporal-analysis.md](docs/temporal-analysis.md).
+
 ## Task 04 — mini-template comun P1/P2/P3
 
 Livrarea din 15 octombrie 2026 este un **schelet executabil cu simulări explicite**, nu MVP-ul cu model antrenat. Demo-urile nu folosesc oameni, camere, rețea, dataset sau ponderi. Nu se face antrenare. Datele simulate nu sunt rezultate experimentale.
@@ -17,7 +100,7 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e ".[dev]"
 ```
 
-Mediul `.venv` existent este deja instalat editable. Dacă folosești un mediu existent, nu îl recrea. Dependențe de bază: NumPy și PySide6. Grupuri opționale: `[video]` = opencv-python-headless; `[ai]` = torch, torchvision, scikit-learn; `[dev]` = pytest, pytest-qt. `[ml]` este păstrat pentru codul anterior. **Nu instala simultan opencv-python și opencv-python-headless**, deoarece ambele oferă `cv2`; folosește un mediu separat pentru schimbarea variantei.
+Mediul `.venv` existent este deja instalat editable. Dacă folosești un mediu existent, nu îl recrea. Dependențe de bază: NumPy și PySide6. Grupuri opționale: `[terminal]`/`[video]` = opencv-python; `[model]` = PyTorch, Transformers și Pillow; `[dev]` = pytest, pytest-qt. `[ai]` și `[ml]` sunt păstrate numai pentru codul istoric. **Nu instala simultan opencv-python și opencv-python-headless**, deoarece ambele oferă `cv2`; folosește un mediu separat pentru schimbarea variantei.
 
 `requirements-lock.txt` este snapshotul istoric al prototipului anterior, nu un lock al mini-template-ului. Versiunile verificate acum sunt consemnate în `docs/task04-verification.md`; nu pretindem verificarea tuturor combinațiilor permise de pyproject.
 
@@ -62,6 +145,6 @@ Implementat aici: contracte validate, FakePredictor determinist, sursă sintetic
 .\.venv\Scripts\python.exe -m pytest
 ```
 
-Selecția implicită acoperă doar `tests/contracts`, `tests/ai`, `tests/video`, `tests/engine`, `tests/ui`. Nu necesită dataset, camere, rețea sau modele. Testele anterioare `tests/test_*.py` sunt păstrate separat, pot necesita opționale și nu sunt declarate reexecutate în această livrare.
+Selecția implicită acoperă `tests/contracts`, `tests/ai`, `tests/video`, `tests/engine`, `tests/ui` și `tests/terminal`. Testele terminalului nu necesită dataset, cameră, rețea sau model. Testele anterioare `tests/test_*.py` sunt păstrate separat, pot necesita opționale și nu sunt declarate reexecutate în această livrare.
 
 Testele Qt folosesc implicit offscreen; aceasta nu echivalează cu verificarea vizuală manuală pe Windows. Vezi raportul verificării pentru comenzile executate și limite. Dacă folderul temporar al mediului restricționat nu permite scrierea, setează TEMP/TMP într-un subfolder `artifacts/tmp` și rulează pytest cu `--basetemp artifacts/pytest-task04`.

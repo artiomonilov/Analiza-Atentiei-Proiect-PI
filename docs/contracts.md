@@ -43,3 +43,15 @@ Istoricul deduplică (source_id, run_id, request_id). CSV păstrează is_demo ș
 ## Cod anterior
 
 Contractele vechi sunt păstrate în `legacy_contracts.py`, iar fereastra anterioară în `legacy_ui.py`; importurile vechilor module/teste au fost ajustate. `python -m audience_analysis.app` rămâne intrarea anterioară, nefolosită de mini-template. Nu există un al doilea proiect sau un al doilea pachet instalabil. Adaptarea codului real la noile contracte rămâne în taskurile P1/P2, nu este activată în această livrare.
+
+## Pipeline CLI experimental
+
+Etapa 5: `TemporalAnalyzer.update(VideoMeasurement | TemporalSample) -> TemporalUpdate` furnizează ferestre, geometrie filtrată și evenimente noi, fără inferență. Istoricul și evenimentele sunt limitate temporal și numeric. `VideoProcessor` expune `on_temporal`, `VideoSessionReport.temporal` și exporturi CSV temporale independente. `BlinkEvent` este un eveniment automat nevalidat experimental, separat per ochi. Configurația, disponibilitatea statisticilor și limitele sunt descrise în `docs/temporal-analysis.md`.
+
+Etapa 4: `FaceLandmarker(..., mode="VIDEO").process_video(frame_bgr, timestamp_ms)` păstrează contractul `LandmarkerResult` și cere milisecunde întregi strict crescătoare. Modul IMAGE rămâne implicit. `VideoProcessor.run(source, ...)` produce incremental `VideoMeasurement` prin callback/CSV și returnează `VideoSessionReport`; nu acumulează cadre sau rezultate. Proveniența timestampurilor și disponibilitatea măsurătorilor sunt exportate explicit. Detalii: `docs/video-processing.md`.
+
+Etapa 3: `EyeFeaturesEstimator.estimate(face, (width, height)) -> EyesResult(left, right)` reutilizează `FaceLandmarks`. Rezultatele păstrează EAR, centrul irisului în imagine și poziția în reperul ochiului separat; valorile lipsă sunt `None`. Calibrarea este individuală pentru fiecare ochi. `MediaPipeHeadPose.geometry(bgr) -> FacialGeometry(head_pose, eyes)` utilizează o singură inferență. Contractul geometric și convențiile sunt în `docs/eye-features.md`; nici EAR, nici poziția irisului nu produc clasificări ale atenției.
+
+`AnalysisPipeline` separă detecția, orientarea capului, expresiile și angajamentul. `FrameResult` păstrează timestamp-ul, numărul de fețe, starea feței, `AttentionEstimate`, distribuția expresiei, timpul de inferență și eroarea. `AnalysisResult` agregă numai cadrele disponibile și exportă `summary.json`, `frames.csv`, `windows.csv` și `errors.log`.
+
+YuNet selectează determinist cea mai mare față, fără identificare sau urmărire. Predictorul de expresii este încărcat o dată și primește numai decupajul acelei fețe. MediaPipe este activat doar cu un model `.task` indicat explicit; adaptorul returnează unghiurile din `head_pose.py`, păstrând direcția atenției `unknown`. `HeadPoseEstimator` extrage rotația prin SVD și permite calibrarea neutră prin `R_neutral.T @ R_current`; matricile indisponibile produc unghiuri `None`. Convențiile sunt descrise în `docs/head-pose.md`. `EngagementPredictor` are contractul `predict_clip(frames) -> EngagementResult`, dar predictorul instalat returnează explicit „Model de angajament indisponibil”; expresiile nu sunt convertite în angajament.
