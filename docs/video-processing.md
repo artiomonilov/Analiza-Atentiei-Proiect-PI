@@ -1,5 +1,7 @@
 # Etapa 4 — procesare video și webcam
 
+Rulările experimentale identificate folosesc acum `--session-id`, `--role` și, pentru V, `--frozen-plan`; vezi `docs/real-world-evaluation.md`. Contractul geometric de predare independent de P2/P3 este în `docs/contracts.md`. CLI-ul de expresii `python -m audience_analysis video` este o cale separată, cu export streaming și aceeași logică FrameClock pentru timestampuri. El nu înlocuiește VideoProcessor sau motorul multi-sursă al colegilor. Modelele/mediul de referință sunt descrise în `docs/environment.md`.
+
 ## Arhitectură și flux
 
 `run_video_analysis.py` este intrarea pentru geometrie facială sincronă. Reutilizează `FaceLandmarker`, `HeadPoseEstimator`, `EyeFeaturesEstimator` și funcțiile existente de randare; nu apelează clasificatoarele din pipeline-ul CLI anterior. `video_processor.py` se ocupă de captură, timestampuri, măsurători și CSV. Nu există fire de execuție, cozi sau inferențe concurente.

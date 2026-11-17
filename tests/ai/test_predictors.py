@@ -4,7 +4,7 @@ import sys
 import pytest
 
 from audience_analysis.ai.fake_predictor import FakePredictor
-from audience_analysis.ai.predictor import RealPredictor
+from audience_analysis.ai.predictor import RealPredictor, ModelUnavailableError
 
 
 def test_fake_is_deterministic_and_explicit(config, sequence):
@@ -16,7 +16,7 @@ def test_fake_is_deterministic_and_explicit(config, sequence):
 
 
 def test_real_never_falls_back(config, sequence):
-    with pytest.raises(NotImplementedError, match="P1-S3.3"):
+    with pytest.raises(ModelUnavailableError, match="MODEL_UNAVAILABLE"):
         RealPredictor("not-configured.pt", config).predict(sequence)
 
 

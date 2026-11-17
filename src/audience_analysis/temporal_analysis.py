@@ -297,7 +297,9 @@ class TemporalAnalyzer:
             enabled = getattr(config, side + "_blink") is not None
             thresholds = getattr(config, side + "_blink")
             events_truncated = self._last_evicted_event is not None and self._last_evicted_event >= start
-            result[side + "_blink"] = {"enabled": enabled, "count": len(events) if enabled else None,
+            observed = sum(row[side + "_ear"] is not None for _, row in rows)
+            result[side + "_blink"] = {"enabled": enabled, "count": len(events) if enabled and observed else None,
+                "observed_ear_samples": observed,
                 "close_threshold": thresholds.close if thresholds else None,
                 "reopen_threshold": thresholds.reopen if thresholds else None,
                 "valid_duration_ms": valid_duration,

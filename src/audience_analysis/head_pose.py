@@ -74,6 +74,14 @@ class HeadPoseEstimator:
     def clear_calibration(self) -> None:
         self._neutral_rotation = None
 
+    def calibration_matrix(self) -> np.ndarray | None:
+        """Referință minimă serializabilă, fără translație/scalare sau landmarks."""
+        if self._neutral_rotation is None:
+            return None
+        matrix = np.eye(4)
+        matrix[:3, :3] = self._neutral_rotation
+        return matrix
+
     def estimate(self, matrix: np.ndarray | None) -> HeadPose:
         calibrated = self._neutral_rotation is not None
         if matrix is None:

@@ -238,7 +238,7 @@ class VideoProcessor:
                             pose = self.pose_estimator.estimate(face.transformation_matrix if face else None)
                             eyes = self.eye_estimator.estimate(face, (frame.shape[1], frame.shape[0]))
                         except (ValueError, RuntimeError) as exc:
-                            error = str(exc)
+                            error = f"{type(exc).__name__}: cadru sau geometrie indisponibilă"
                             try:
                                 validate_bgr(frame)
                             except ValueError:

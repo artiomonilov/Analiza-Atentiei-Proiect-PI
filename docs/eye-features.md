@@ -1,5 +1,7 @@
 # Etapa 3 — caracteristicile ochilor și poziția aproximativă a irisului
 
+Contractul pentru integrarea viitoare este în `docs/contracts.md`: EAR adimensional, iris normalizat în reperul ochiului, left/right ale subiectului, valori None și flaguri de disponibilitate. `geometric_api` serializează măsurătorile fără inferență/captură suplimentară. Profilele individuale sunt reutilizate din CalibrationManager; geometria rămâne distinctă de punctul privit pe ecran și de atenție.
+
 ## Integrare
 
 `src/audience_analysis/eye_features.py` primește `FaceLandmarks` din modulul existent și dimensiunile `(lățime, înălțime)`. Nu încarcă modele. `test_face_landmarker.py` folosește aceeași instanță MediaPipe pentru fotografia neutră și fotografia curentă, apoi calculează separat head pose și geometria ochilor. `vision.MediaPipeHeadPose.geometry(frame_bgr)` oferă `FacialGeometry(head_pose, eyes)` dintr-o singură inferență pe cadru; metoda veche `estimate` rămâne compatibilă.

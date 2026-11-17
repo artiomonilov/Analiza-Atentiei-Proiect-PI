@@ -7,6 +7,8 @@ Intrare: PreparedSequence RGB float32 [T,3,H,W], deja normalizată de P2. Ieșir
 Exemplu fără Qt, cv2, GPU sau torch:
 `python -m audience_analysis.examples.p1_predictor_demo`.
 
-Primul TODO: **P1-S2.1**, `data.py`: manifest autorizat → validare fișiere/etichete/splituri → listă validată, verificată cu cazuri negative. `models.py` indică P1-S3.1 și P1-S5.1; `predictor.py` indică P1-S3.3. Refolosește codul anterior numai după verificarea compatibilității cu noul contract; nu normaliza de două ori.
+`data.py` validează manifestele/spliturile și cache-urile și reutilizează pregătirea P2. `models.py` reutilizează encoderul/mean/GRU legacy, opțional cu capete separate, fără download. `package.py` încarcă/exportă state_dict și metadate verificate; `RealPredictor` încarcă o singură dată și transmite intrarea deja normalizată. `evaluation.py` oferă R0 și comparație pe subset comun, cu selecție numai pe validation. Nu există ponderi DAiSEE evaluate în repository și nu se fabrică rezultate din geometrie.
+
+Comenzi independente: `python -m audience_analysis.ai.cli --help` sau entry point `audience-ai`. Model lipsă: cod 4, MODEL_UNAVAILABLE și levels=null; FakePredictor nu este fallback. Formatul pachetului, utilizarea și blocajele sunt în [docs/p1-data-model.md](../../../docs/p1-data-model.md).
 
 Notebookuri: `notebooks/template/`. Checklist: [P1](../../../docs/planning/01_P1_Date_AI_saptamanile_1-7.md).

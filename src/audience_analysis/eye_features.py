@@ -153,6 +153,24 @@ class EyeFeaturesEstimator:
     def clear_calibration(self) -> None:
         self._neutral.clear()
 
+    def calibration_state(self) -> dict:
+        return {side: {"ear": value.ear, "iris_position": list(value.iris_position)} for side, value in self._neutral.items()}
+
+    def load_calibration_state(self, state: dict) -> None:
+        if not isinstance(state, dict) or set(state) - {"left", "right"}:
+            raise ValueError("Configurație de calibrare oculară invalidă.")
+        validated = {}
+        try:
+            for side, value in state.items():
+                ear = float(value["ear"])
+                iris = np.asarray(value["iris_position"], dtype=float)
+                if not np.isfinite(ear) or ear <= 0 or iris.shape != (2,) or not np.isfinite(iris).all() or (iris < 0).any() or (iris > 1).any():
+                    raise ValueError("Referință EAR/iris invalidă.")
+                validated[side] = EyeFeatures(side, ear=ear, iris_position=tuple(map(float, iris)))
+        except (KeyError, TypeError) as error:
+            raise ValueError("Referință EAR/iris incompletă.") from error
+        self._neutral = validated
+
 
 def draw_eye_features(image_bgr: np.ndarray, result: EyesResult) -> np.ndarray:
     import cv2

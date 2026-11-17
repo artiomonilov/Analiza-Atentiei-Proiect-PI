@@ -102,11 +102,13 @@ def test_empty_video(session):
     assert session.closed == 1 and session.released
 
 
-def test_inference_error_does_not_reuse_previous_measurements(session):
-    session.outcomes = [LandmarkerResult((face_fixture(),)), RuntimeError("inference failed"), LandmarkerResult((face_fixture(),))]
+def test_inference_error_does_not_reuse_previous_measurements(session, tmp_path):
+    session.outcomes = [LandmarkerResult((face_fixture(),)), RuntimeError("C:/Users/PRIVATE_PERSON/input.mp4"), LandmarkerResult((face_fixture(),))]
     records = []
-    report = VideoProcessor(session.model).run(session.source, display=False, on_result=records.append)
-    assert report.errors == 1 and records[1].error == "inference failed"
+    output = tmp_path / "errors.csv"
+    report = VideoProcessor(session.model).run(session.source, display=False, on_result=records.append, output_csv=output)
+    assert report.errors == 1 and records[1].error == "RuntimeError: cadru sau geometrie indisponibilă"
+    assert "PRIVATE_PERSON" not in output.read_text(encoding="utf-8")
     assert records[1].yaw is None and records[2].yaw == pytest.approx(0)
 
 

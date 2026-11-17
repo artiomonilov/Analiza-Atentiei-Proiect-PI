@@ -197,6 +197,16 @@ def test_expired_window_samples_and_events_are_removed():
     assert len(analyzer._events) == 0
 
 
+def test_enabled_blink_counter_without_any_ear_is_unavailable_not_zero():
+    analyzer = TemporalAnalyzer(config())
+    analyzer.update(TemporalSample(0))
+    result = analyzer.update(TemporalSample(200))
+    left = result.windows[0]["left_blink"]
+    assert left["enabled"] and left["count"] is None and left["observed_ear_samples"] == 0
+    assert left["rate_per_min"] is None
+    assert analyzer.update(sample(300)).windows[0]["left_blink"]["count"] == 0
+
+
 def test_reference_matching_distinguishes_automatic_and_manual():
     from audience_analysis.temporal_analysis import BlinkEvent, compare_blinks
     automatic = [BlinkEvent("left", 100, 250, 150), BlinkEvent("left", 110, 260, 150)]

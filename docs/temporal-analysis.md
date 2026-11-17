@@ -1,5 +1,7 @@
 # Etapa 5 — analiză temporală a geometriei faciale
 
+Consolidare: o fereastră cu detector EAR configurat, dar fără niciun eșantion EAR valid, returnează `count=None`, nu zero; `observed_ear_samples` documentează disponibilitatea. Frecvența continuă să necesite durată validă suficientă. `geometric_api.temporal_payload` oferă un mesaj serializabil cu ID-uri, fără un scheduler nou; detalii în `docs/contracts.md`. Contoarele de evenimente automate nu sunt referințe manuale și nu demonstrează atenția.
+
 ## Arhitectură
 
 `temporal_analysis.py` nu importă MediaPipe, OpenCV sau interfața video. `TemporalAnalyzer.update(record)` acceptă un `VideoMeasurement` existent sau un `TemporalSample(timestamp_ms, head, left_ear, right_ear, left_iris, right_iris)`. Pentru obiectul video, lipsa feței, o eroare sau flagurile de disponibilitate invalide produc măsurători lipsă; singularitatea Euler invalidează analiza temporală a unghiurilor. Nu se execută inferențe suplimentare.

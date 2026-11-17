@@ -1,5 +1,7 @@
 # Etapa 2 — orientarea capului
 
+Predarea către integrare este documentată în `docs/contracts.md`, prin `geometric_api.observation_payload`: grade, convenția RzRyRx, reper camera/neutral explicit, ID-uri de sursă/rulare/sesiune și availability. Profilul neutru se salvează prin CalibrationManager; acesta poate include hashurile materialelor C. Modulul nu produce niveluri de atenție. Verificarea pe orientări reale independente rămâne necesară chiar dacă testele matricilor sintetice trec.
+
 `head_pose.py` primește matricea facială 4×4 din `FaceLandmarks.transformation_matrix`. Nu inițializează MediaPipe; poate fi reutilizat separat și testat exclusiv cu NumPy. `vision.py` deleagă acum conversia acestui modul. Scriptul foto păstrează afișarea landmarks/blendshapes și adaugă unghiurile în consolă și peste imagine.
 
 ## Convenții matematice

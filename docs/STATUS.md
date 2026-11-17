@@ -1,4 +1,10 @@
-# Starea implementării — 11 octombrie 2026
+# Starea implementării — actualizare 16 noiembrie 2026
+
+Starea curentă, testele finale și toate cele 27 de taskuri P1 sunt în [artiom-branch-completion.md](artiom-branch-completion.md). Documentul [project-audit-week-2026-11-16.md](project-audit-week-2026-11-16.md) rămâne fotografia anterioară corecțiilor, nu descrierea predictorului actual.
+
+P1 are loader de manifest/cache, RealPredictor pentru pachet validat, fabrici mean/GRU cu capete separate, R0 și comparații pe subset comun. Nu există date/ponderi DAiSEE autorizate/evaluate și nu s-a antrenat un model. E1–E8 sunt consolidate: guard final în API, proveniență C raw opțională, snapshoturi fără căi externe implicit, streaming CLI și importuri fără descărcări. `docs/environment.md` descrie mediul izolat și diferența față de cel original păstrat. Taskurile P2/P3 neintegrate rămân dependențe, nu sunt declarate reparate aici.
+
+## Istoric — 11 octombrie 2026
 
 Implementarea pornește de la planul furnizat. Nu echivalează cu finalizarea proiectului de cercetare.
 
@@ -41,4 +47,4 @@ PySide6 este acum instalat local. Verificarea mini-template-ului a trecut cu **2
 
 ## Actualizare — interfață terminal, 3 noiembrie 2026
 
-Fluxul nou este exclusiv de terminal: primește o imagine sau un videoclip local, afișează progresul citirii și confirmă finalizarea. La cerere, încarcă un model local pentru distribuția etichetelor de expresie, fără detecție facială, identificare sau urmărire. Verificarea automată este acoperită de `tests/terminal`.
+La acea dată fluxul simplu de terminal oferea progres și statistică de expresie. În versiunea actuală CLI-ul principal are detecție YuNet pentru fața principală, MediaPipe opțional și export streaming; laboratorul geometric are video/temporal și dashboard separat. Nu există identificarea persoanei sau clasificator de atenție. Modelele HF sunt locale implicit, cu revizie fixată; descărcarea cere flag explicit. Verificarea automată este acoperită de `tests/terminal`.

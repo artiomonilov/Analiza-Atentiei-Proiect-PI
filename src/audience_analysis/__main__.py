@@ -18,7 +18,7 @@ def _console(text: str = "") -> None:
 def _print_result(result) -> None:
     summary = result.summary()
     _console(f"\nANALIZA {summary['kind'].upper()}")
-    _console(f"- Fișier: {summary['source']}")
+    _console(f"- Fișier: {result.source}")
     _console(f"- Durată: {summary['duration_s'] if summary['duration_s'] is not None else 'necunoscută'}")
     _console(f"- FPS original: {summary['fps'] if summary['fps'] is not None else 'necunoscut'}")
     _console(f"- Cadre eșantionate: {summary['sampled_frames']}")
@@ -53,6 +53,7 @@ def main() -> int:
     parser.add_argument("--output-dir", type=Path, help="director pentru rapoarte")
     parser.add_argument("--sample-interval", type=float, default=1.0, help="video: secunde între cadre (implicit 1)")
     parser.add_argument("--device", choices=("auto", "cpu", "cuda"), default="auto")
+    parser.add_argument("--allow-model-download", action="store_true", help="permite explicit descărcarea reviziei fixate a modelului de expresii")
     parser.add_argument("--face-landmarker-model", type=Path, help="cale locală la fișierul MediaPipe .task")
     parser.add_argument("--calibrated", action="store_true", help="opțiune istorică; pentru calibrare neutră folosește scriptul foto --neutral-image")
     parser.add_argument("--config", type=Path, help="configurație pentru demo-ul istoric")
@@ -68,15 +69,17 @@ def main() -> int:
         if not args.input.is_file():
             parser.error(f"Fișierul nu există: {args.input}")
         from .pipeline import AnalysisPipeline, analyse_image, analyse_video, export_reports
-        pipeline = AnalysisPipeline(device=args.device, face_landmarker_model=args.face_landmarker_model, calibrated=args.calibrated)
+        pipeline = AnalysisPipeline(device=args.device, face_landmarker_model=args.face_landmarker_model, calibrated=args.calibrated,
+                                    allow_model_download=args.allow_model_download)
         try:
             def progress(percent, timestamp): _console(f"Progres: {percent:3d}% — {timestamp:.2f}s")
-            result = analyse_image(args.input, pipeline) if args.command == "image" else analyse_video(args.input, pipeline, args.sample_interval, progress)
+            result = analyse_image(args.input, pipeline) if args.command == "image" else analyse_video(args.input, pipeline, args.sample_interval, progress,
+                report_dir=args.output_dir, retain_frames=False)
             _print_result(result)
             if args.output_dir:
                 export_reports(result, args.output_dir)
                 _console(f"\nRapoarte salvate în: {args.output_dir}")
-            return 0
+            return 130 if result.interrupted else 0
         except KeyboardInterrupt:
             print("\nProcesare întreruptă controlat; resursele video au fost eliberate.", file=sys.stderr)
             return 130

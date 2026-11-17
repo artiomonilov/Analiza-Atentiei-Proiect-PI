@@ -6,6 +6,7 @@ import numpy as np
 
 
 MODEL_ID = "jihedjabnoun/vit-face-emotion-recognition"
+MODEL_REVISION = "ec667156e4f9a2e329911a1da5c13572ae3d75d4"  # revizia identificată în cache-ul local existent
 EXPECTED_LABELS = {"Anger", "Disgust", "Fear", "Happiness", "Neutral", "Sadness", "Surprise"}
 _predictor: "EmotionStatisticsModel | None" = None
 _predictor_lock = Lock()
@@ -25,7 +26,9 @@ class FrameStatistics:
 class EmotionStatisticsModel:
     """Încarcă modelul o singură dată și produce distribuția softmax completă."""
 
-    def __init__(self, model_id: str = MODEL_ID):
+    def __init__(self, model_id: str = MODEL_ID, *, revision: str = MODEL_REVISION, allow_download=False):
+        if not isinstance(revision, str) or len(revision) != 40 or any(c not in "0123456789abcdef" for c in revision):
+            raise ValueError("Este necesară o revizie HF fixată prin commit SHA.")
         try:
             import torch
             from PIL import Image
@@ -35,18 +38,19 @@ class EmotionStatisticsModel:
         self.torch = torch
         self.Image = Image
         self.model_id = model_id
+        self.revision = revision
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         try:
-            self.processor = AutoImageProcessor.from_pretrained(model_id)
-            self.model = AutoModelForImageClassification.from_pretrained(model_id).to(self.device).eval()
+            self.processor = AutoImageProcessor.from_pretrained(model_id, revision=revision, local_files_only=not allow_download)
+            self.model = AutoModelForImageClassification.from_pretrained(model_id, revision=revision, local_files_only=not allow_download).to(self.device).eval()
         except (OSError, RuntimeError, ValueError) as online_error:
             try:
-                self.processor = AutoImageProcessor.from_pretrained(model_id, local_files_only=True)
-                self.model = AutoModelForImageClassification.from_pretrained(model_id, local_files_only=True).to(self.device).eval()
+                self.processor = AutoImageProcessor.from_pretrained(model_id, revision=revision, local_files_only=True)
+                self.model = AutoModelForImageClassification.from_pretrained(model_id, revision=revision, local_files_only=True).to(self.device).eval()
             except (OSError, RuntimeError, ValueError) as cache_error:
                 raise ModelStatisticsError(
-                    "Modelul nu a putut fi încărcat. La prima rulare verifică internetul și spațiul pe disc; "
-                    "după descărcare va fi reutilizat din cache local."
+                    "Revizia fixată a modelului lipsește sau este incompatibilă. Folosește cache-ul local "
+                    "sau autorizează explicit descărcarea cu --allow-model-download."
                 ) from cache_error
         mapping = getattr(self.model.config, "id2label", None)
         if not isinstance(mapping, dict):
@@ -75,9 +79,9 @@ class EmotionStatisticsModel:
         return FrameStatistics(label, probabilities[label], probabilities)
 
 
-def get_statistics_model() -> EmotionStatisticsModel:
+def get_statistics_model(*, allow_download=False) -> EmotionStatisticsModel:
     global _predictor
     with _predictor_lock:
         if _predictor is None:
-            _predictor = EmotionStatisticsModel()
+            _predictor = EmotionStatisticsModel(allow_download=allow_download)
         return _predictor

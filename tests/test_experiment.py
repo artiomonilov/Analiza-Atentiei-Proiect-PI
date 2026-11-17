@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import patch
 
 import numpy as np
+import pytest
 
 from audience_analysis.legacy_contracts import PipelineConfig
 from audience_analysis.experiment import train, evaluate, write_json
@@ -13,6 +14,8 @@ from audience_analysis.models import EngagementModel
 
 
 class ExperimentTests(unittest.TestCase):
+    @pytest.mark.training
+    @pytest.mark.checkpoint_fixture
     def test_training_export_and_evaluation_with_synthetic_fixture(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -4,6 +4,7 @@ import unittest
 
 import numpy as np
 import torch
+import pytest
 
 from audience_analysis.legacy_contracts import PipelineConfig, SequenceBatch
 from audience_analysis.models import EngagementModel, Predictor, save_bundle
@@ -14,6 +15,7 @@ class ModelTests(unittest.TestCase):
     def setUpClass(cls):
         torch.set_num_threads(1)
 
+    @pytest.mark.training
     def test_real_optimizer_step_both_architectures_and_frozen_encoder(self):
         for architecture in ("mean", "gru"):
             model = EngagementModel(architecture, pretrained=False).train()
@@ -29,6 +31,7 @@ class ModelTests(unittest.TestCase):
             self.assertFalse(torch.equal(before, model.classifier.weight))
             self.assertTrue(all(p.grad is None for p in model.encoder.parameters()))
 
+    @pytest.mark.checkpoint_fixture
     def test_bundle_parity_and_shape_validation(self):
         config = PipelineConfig(image_size=32, frames=4)
         frames = np.random.default_rng(1).integers(0, 256, (4, 32, 32, 3), dtype=np.uint8)

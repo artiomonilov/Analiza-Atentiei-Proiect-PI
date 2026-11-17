@@ -11,16 +11,29 @@ dependencies = ["numpy>=1.26,<3", "PySide6>=6.8,<7"]
 
 [project.optional-dependencies]
 ml = ["torch>=2.5,<3", "torchvision>=0.20,<1"]
-video = ["opencv-python>=4.10,<6"]
+video = ["opencv-contrib-python>=4.10,<6"]
 ai = ["torch>=2.5,<3", "torchvision>=0.20,<1", "scikit-learn>=1.5,<2"]
-terminal = ["opencv-python>=4.10,<6"]
-model = ["torch>=2.5,<3", "transformers>=4.46,<6", "Pillow>=10,<13"]
+terminal = ["opencv-contrib-python>=4.10,<6"]
+model = ["torch>=2.5,<3", "torchvision>=0.20,<1", "transformers>=4.46,<6", "Pillow>=10,<13"]
 vision = ["mediapipe>=1.2,<2"]
 dev = ["pytest>=8,<10", "pytest-qt>=4.4,<5"]
 
 [project.scripts]
 audience-analysis = "audience_analysis.__main__:main"
 audience-experiment = "audience_analysis.experiment:main"
+audience-ai = "audience_analysis.ai.cli:main"
+audience-video = "run_video_analysis:main"
+audience-calibrate = "calibrate_session:main"
+audience-validate = "run_validation:main"
+audience-dashboard = "run_dashboard:main"
+audience-session = "experimental_session:main"
+
+[tool.setuptools]
+py-modules = ["run_video_analysis", "calibrate_session", "run_validation", "run_dashboard", "experimental_session", "compare_blinks", "test_face_landmarker"]
+
+[tool.setuptools.package-dir]
+"" = "."
+audience_analysis = "src/audience_analysis"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -31,4 +44,5 @@ audience_analysis = ["assets/*.onnx", "assets/*LICENSE", "assets/README.md"]
 [tool.pytest.ini_options]
 testpaths = ["tests/contracts", "tests/ai", "tests/video", "tests/engine", "tests/ui", "tests/terminal"]
 qt_api = "pyside6"
+markers = ["training: execută optimizare/antrenare sintetică explicită", "checkpoint_fixture: generează checkpoint sintetic de test, nu ponderi reale"]
 

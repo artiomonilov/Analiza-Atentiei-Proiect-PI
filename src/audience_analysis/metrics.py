@@ -6,7 +6,7 @@ def classification_metrics(targets, predictions):
     if len(targets) != len(predictions) or len(targets) == 0:
         raise ValueError("Metricile necesită exemple și predicții pereche")
     for target, prediction in zip(targets, predictions):
-        if target not in range(4) or prediction not in range(4):
+        if any(isinstance(v, (bool, np.bool_)) or not isinstance(v, (int, np.integer)) or v not in range(4) for v in (target, prediction)):
             raise ValueError("Clasă invalidă")
         matrix[target, prediction] += 1
     tp = np.diag(matrix)

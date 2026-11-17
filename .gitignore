@@ -18,3 +18,5 @@ exports/
 
 archive.zip
 models/*.task
+build/
+dist/

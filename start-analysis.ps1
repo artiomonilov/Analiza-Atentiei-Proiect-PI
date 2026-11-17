@@ -15,16 +15,27 @@ param(
     [double]$SampleInterval = 1.0,
     [ValidateSet("auto", "cpu", "cuda")]
     [string]$Device = "auto",
-    [string]$OutputDir
+    [string]$OutputDir,
+    [string]$PythonPath,
+    [switch]$AllowModelDownload
 )
 
 $ErrorActionPreference = "Stop"
 Set-Location -LiteralPath $PSScriptRoot
 
-$python = Join-Path $PSScriptRoot ".venv\Scripts\python.exe"
-if (-not (Test-Path -LiteralPath $python)) {
-    throw "Nu există .venv\Scripts\python.exe. Creează mediul și instalează dependențele din README."
+if ([string]::IsNullOrWhiteSpace($PythonPath)) {
+    $PythonPath = Join-Path $PSScriptRoot ".venv-completion\Scripts\python.exe"
+    if (-not (Test-Path -LiteralPath $PythonPath)) {
+        $PythonPath = Join-Path $PSScriptRoot ".venv-local\Scripts\python.exe"
+    }
+    if (-not (Test-Path -LiteralPath $PythonPath)) {
+        $PythonPath = Join-Path $PSScriptRoot ".venv\Scripts\python.exe"
+    }
 }
+if (-not (Test-Path -LiteralPath $PythonPath)) {
+    throw "Python local indisponibil. Indică -PythonPath sau pregătește mediul din docs/environment.md."
+}
+$analysisPython = (Resolve-Path -LiteralPath $PythonPath).Path
 
 if ([string]::IsNullOrWhiteSpace($InputPath)) {
     $InputPath = Read-Host "Calea către imagine sau videoclip"
@@ -45,5 +56,7 @@ if ([string]::IsNullOrWhiteSpace($OutputDir)) {
 
 Write-Host "Pornesc analiza $Mode pentru: $source" -ForegroundColor Magenta
 Write-Host "Rapoarte: $OutputDir" -ForegroundColor Magenta
-& $python -m audience_analysis $Mode --input $source.Path --output-dir $OutputDir --sample-interval $SampleInterval --device $Device
+$analysisArguments = @('-X', 'utf8', '-m', 'audience_analysis', $Mode, '--input', $source.Path, '--output-dir', $OutputDir, '--sample-interval', $SampleInterval, '--device', $Device)
+if ($AllowModelDownload) { $analysisArguments += '--allow-model-download' }
+& $analysisPython @analysisArguments
 exit $LASTEXITCODE

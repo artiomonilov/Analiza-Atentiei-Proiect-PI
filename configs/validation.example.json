@@ -1,0 +1,18 @@
+{
+  "experiment_id": "experiment_local_01",
+  "session_id": "validation_session_01",
+  "calibration_session_ids": [],
+  "final_evaluation": false,
+  "max_gap_ms": 500,
+  "timestamp_tolerance_ms": 20,
+  "blink_tolerance_ms": 100,
+  "prediction_head_convention": "camera_xyz_rzryrx_deg",
+  "reference_head_convention": null,
+  "prediction_head_frame": "camera",
+  "reference_head_frame": null,
+  "head_reference_verified": false,
+  "iris_reference_convention": null,
+  "iris_reference_verified": false,
+  "blink_reference_complete": false,
+  "scenarios": []
+}
