@@ -1,3 +1,4 @@
+
 from collections.abc import Callable
 from threading import Event, Lock
 import time
@@ -8,89 +9,248 @@ from PySide6.QtCore import QThread, Signal
 from ..config import SequenceConfig
 from ..contracts import FramePacket, InferenceRequest, ModelOutput, PredictionResult, Predictor, SourceConfig, SourceStatusEvent, Status
 from ..video.sequences import SequenceBuilder
-from ..video.sources import synthetic_frame
+from ..video.preprocessing import FaceDetector
+from ..video.sources import open_real_source, redact, synthetic_frame
+from ..video.tracking import FaceTracker
 from .scheduler import LatestScheduler
 
 
 class PreviewStore:
+    """Ultimul cadru de previzualizare per sursă; cadrele vechi sunt suprascrise, nu se adună."""
     def __init__(self):
         self.lock = Lock()
         self.runs: dict[str, str] = {}
         self.frames: dict[str, FramePacket] = {}
 
     def activate(self, source: str, run: str) -> None:
+        """Începe o rulare nouă pentru sursă și șterge cadrul vechi."""
         with self.lock:
             self.runs[source] = run
             self.frames.pop(source, None)
 
     def put(self, packet: FramePacket) -> None:
+        """Salvează cadrul dacă aparține rulării active (îl înlocuiește pe cel anterior)."""
         with self.lock:
             if self.runs.get(packet.source_id) == packet.run_id:
                 self.frames[packet.source_id] = packet
 
     def take(self, source: str) -> FramePacket | None:
+        """Scoate și întoarce ultimul cadru al sursei, sau None dacă nu a venit unul nou."""
         with self.lock:
             return self.frames.pop(source, None)
 
     def invalidate(self, source: str) -> None:
+        """Oprește previzualizarea sursei și șterge cadrul păstrat."""
         with self.lock:
             self.runs.pop(source, None)
             self.frames.pop(source, None)
 
 
+FACE_PROBLEMS = {Status.NO_FACE, Status.LOW_QUALITY}
+FACE_MESSAGES = {
+    Status.NO_FACE: "Nicio față detectată; secvențele se reiau",
+    Status.LOW_QUALITY: "Fețe prea mici pentru analiză",
+}
+
+
 class SourceWorker(QThread):
+    """Firul unei surse: citește cadre, detectează și urmărește fețele, formează secvențe și le trimite în coadă."""
     status = Signal(object)
+    # Pauzele (s) dintre încercările de reconectare ale unei camere/unui flux căzut; după ultima -> ERROR.
+    RECONNECT_DELAYS_S = (1.0, 2.0, 4.0, 8.0, 8.0)
 
     def __init__(self, source: SourceConfig, run_id: str, config: SequenceConfig,
-                 scheduler: LatestScheduler, previews: PreviewStore, *, duration_s: float = 30.0):
+                 scheduler: LatestScheduler, previews: PreviewStore, *, duration_s: float = 30.0,
+                 detector_factory: Callable[[], object] | None = None, stats=None):
         super().__init__()
+        self.stats = stats  # EngineStats (opțional): contoare pentru P2-S4.3
         self.source, self.run_id, self.config = source, run_id, config
         self.scheduler, self.previews = scheduler, previews
-        self.duration_s = duration_s
+        self.duration_s = duration_s  # se aplică numai sursei demo; un fișier rulează până la EOF
+        self.detector_factory = detector_factory
         self.stop_event = Event()
+        self._last_status: Status | None = None
 
     def stop(self) -> None:
+        """Cere oprirea; apelabil din orice fir, chiar dacă run() e ocupat. Nu așteaptă terminarea."""
         self.stop_event.set()  # apelabil chiar dacă run() ocupă firul lucrătorului
 
     def emit_status(self, status: Status, message: str) -> None:
+        """Emite un SourceStatusEvent pentru sursa și rularea acestui lucrător și reține starea."""
+        self._last_status = status
         self.status.emit(SourceStatusEvent(uuid4().hex, self.source.source_id, self.run_id, status, message))
 
+    def _face_state(self, status: Status, builders: dict[int, SequenceBuilder]) -> None:
+        """Emite un eveniment numai la schimbarea stării, nu la fiecare cadru."""
+        if status in FACE_PROBLEMS:
+            if status == Status.NO_FACE:
+                builders.clear()  # fără fețe nu rămân cadre vechi în istoric
+            if self._last_status != status:
+                self.emit_status(status, FACE_MESSAGES[status])
+        elif self._last_status in FACE_PROBLEMS:
+            self.emit_status(Status.INSUFFICIENT_DATA, "Fețe detectate; se formează secvențele")
+
+    def _submit(self, sequence, packet: FramePacket, request_id: int, track_id: int | None) -> bool:
+        """Transformă o secvență într-o InferenceRequest și o pune în coadă."""
+        if sequence is None:
+            return False
+        request = InferenceRequest(packet.source_id, packet.run_id, request_id, sequence.sample_times_s[0],
+                                   sequence.sample_times_s[-1], time.monotonic(), sequence, track_id)
+        self.scheduler.submit(request)
+        if self.stats:
+            self.stats.submitted(packet.source_id, packet.run_id)
+        return True
+
+    @staticmethod
+    def _end_message(real: bool, reader, frames_read: int, detection) -> str:
+        """Textul pentru END_OF_SOURCE."""
+        if not real:
+            return "Sfârșitul sursei sintetice"
+        if not (getattr(reader, "is_image", False) or frames_read == 1):
+            return "Sfârșitul sursei"
+        found = len(detection.boxes) if detection is not None else 0
+        usable = sum(crop is not None for crop in detection.crops) if detection is not None else 0
+        if found == 0:
+            faces = "nicio față detectată"
+        else:
+            faces = f"{found} {'față detectată' if found == 1 else 'fețe detectate'}"
+            if usable < found:
+                faces += f" ({usable} suficient de mari pentru analiză)"
+        return f"Imagine statică — {faces}; estimarea angajamentului necesită video"
+
+    def _reconnect(self, old, builders: dict[int, SequenceBuilder], tracker: FaceTracker, origin: float):
+        """P2-S5.4: redeschide o cameră/un flux căzut. Întoarce sursa nouă sau None dacă s-a cerut oprirea.
+
+        Secvențele și urmăririle de dinainte de întrerupere sunt aruncate: cadrele de după nu continuă
+        aceeași fereastră. ConnectionError dacă toate încercările eșuează.
+        """
+        old.close()
+        builders.clear()
+        tracker.reset()
+        name = getattr(old, "name", redact(self.source.location))
+        total = len(self.RECONNECT_DELAYS_S)
+        for attempt, delay in enumerate(self.RECONNECT_DELAYS_S, 1):
+            self.emit_status(Status.INSUFFICIENT_DATA,
+                             f"Conexiune pierdută cu {name}; reconectare în {delay:g} s (încercarea {attempt}/{total})")
+            if self.stop_event.wait(delay):
+                return None
+            try:
+                reader = open_real_source(self.source, clock_origin=origin)
+            except (ConnectionError, OSError, ValueError):
+                continue
+            self.emit_status(Status.INSUFFICIENT_DATA, f"Reconectat la {name}; se formează secvențele")
+            if self.stats:
+                self.stats.reconnect(self.source.source_id, self.run_id)
+            return reader
+        raise ConnectionError(f"{name} nu răspunde după {total} încercări de reconectare")
+
     def run(self) -> None:
-        builder = SequenceBuilder(self.config, demo=True)
-        frame_id, request_id = 0, 0
-        anchor = time.monotonic()
-        self.emit_status(Status.INSUFFICIENT_DATA, "SIMULARE: se formează secvența; nu se detectează fețe")
+        """Bucla firului (pornită de QThread.start())."""
+        real = self.source.kind != "demo"
+        demo_builder = SequenceBuilder(self.config)
+        builders: dict[int, SequenceBuilder] = {}  # un istoric separat pentru fiecare față urmărită
+        tracker = FaceTracker()
+        reader = detector = detection = None
+        live = False  # cameră/rețea: fără sfârșit, timp după ceas, reconectare la pierderea conexiunii
+        frame_index, request_id = 0, 0
+        origin = time.monotonic()  # timpul 0 pentru sursele live, păstrat și după reconectare
         try:
+            if real:
+                reader = open_real_source(self.source, clock_origin=origin)
+                live = getattr(reader, "live", False)
+                detector = (self.detector_factory or FaceDetector)()
+            self.emit_status(Status.INSUFFICIENT_DATA,
+                             "Se formează secvențele" if real else "SIMULARE: se formează secvența; nu se detectează fețe")
+            anchor = time.monotonic()
             while not self.stop_event.is_set():
-                media_time = frame_id / 20.0
-                if media_time > self.duration_s:
-                    self.emit_status(Status.END_OF_SOURCE, "Sfârșitul sursei sintetice")
+                if live:
+                    try:
+                        item = reader.read(self.stop_event)
+                    except ConnectionError:
+                        old, reader = reader, None
+                        reader = self._reconnect(old, builders, tracker, origin)
+                        if reader is None:
+                            break  # oprire cerută în timpul reconectării
+                        continue
+                elif real:
+                    item = reader.read()
+                else:
+                    media_time = frame_index / 20.0
+                    item = (frame_index, media_time, None) if media_time <= self.duration_s else None
+                if item is None:
+                    if self.stop_event.is_set():
+                        break
+                    self.emit_status(Status.END_OF_SOURCE, self._end_message(real, reader, frame_index, detection))
                     break
-                if self.stop_event.wait(max(0, anchor + media_time - time.monotonic())):
+                frame_id, media_time, image = item
+                frame_index += 1
+                # Fișier/demo: redare în ritmul videoclipului. Live: cadrele vin deja în timp real.
+                if self.stop_event.wait(0.0 if live else max(0.0, anchor + media_time - time.monotonic())):
                     break
-                packet = synthetic_frame(self.source.source_id, self.run_id, frame_id, media_time)
-                self.previews.put(packet)
-                sequence = builder.add(packet)
-                if sequence is not None:
-                    request = InferenceRequest(packet.source_id, packet.run_id, request_id,
-                        sequence.sample_times_s[0], sequence.sample_times_s[-1], time.monotonic(), sequence)
-                    self.scheduler.submit(request)
-                    request_id += 1
-                frame_id += 1
+                if not real:
+                    packet = synthetic_frame(self.source.source_id, self.run_id, frame_id, media_time)
+                    self.previews.put(packet)
+                    if self.stats:
+                        self.stats.frame(self.source.source_id, self.run_id, Status.OK)
+                    if self._submit(demo_builder.add(packet), packet, request_id, None):
+                        request_id += 1
+                    continue
+                detection = detector.detect(image)
+                if self.stats:
+                    self.stats.frame(self.source.source_id, self.run_id, detection.status)
+                track_ids, ended = tracker.update(detection.boxes, media_time)
+                for track_id in ended:
+                    builders.pop(track_id, None)
+                # Previzualizare = cadrul întreg + TOATE casetele + numerele lor; modelul primește decupajele.
+                self.previews.put(FramePacket(self.source.source_id, self.run_id, frame_id, media_time,
+                                              image, detection.boxes, track_ids))
+                self._face_state(detection.status, builders)
+                for track_id, crop in zip(track_ids, detection.crops):
+                    if crop is None:
+                        continue  # față prea mică în acest cadru; istoricul ei rămâne, golul e tratat de builder
+                    builder = builders.setdefault(track_id, SequenceBuilder(self.config))
+                    packet = FramePacket(self.source.source_id, self.run_id, frame_id, media_time, crop)
+                    if self._submit(builder.add(packet), packet, request_id, track_id):
+                        request_id += 1
+        except ConnectionError as error:
+            # Mesajele ConnectionError sunt construite de LiveSource/_reconnect cu adresa ascunsă (redact).
+            self.emit_status(Status.ERROR, str(error))
         except Exception:
-            self.emit_status(Status.ERROR, "Eroare în sursa simulată; verifică configurația")
+            self.emit_status(Status.ERROR, "Eroare în sursa video; verifică sursa și modelul de detecție")
         finally:
-            builder.clear()
+            demo_builder.clear()
+            builders.clear()
+            if reader is not None:
+                reader.close()  # eliberează captura (P2-S3.4)
 
 
 class InferenceWorker(QThread):
+    """Singurul fir AI: creează predictorul o dată și procesează cererile din coadă, una câte una."""
     result = Signal(object)
 
     def __init__(self, factory: Callable[[], Predictor], scheduler: LatestScheduler, *, demo: bool):
         super().__init__()
         self.factory, self.scheduler, self.demo = factory, scheduler, demo
 
+    @staticmethod
+    def _end_message(real: bool, reader, frames_read: int, detection) -> str:
+        """Textul pentru END_OF_SOURCE."""
+        if not real:
+            return "Sfârșitul sursei sintetice"
+        if not (getattr(reader, "is_image", False) or frames_read == 1):
+            return "Sfârșitul sursei"
+        found = len(detection.boxes) if detection is not None else 0
+        usable = sum(crop is not None for crop in detection.crops) if detection is not None else 0
+        if found == 0:
+            faces = "nicio față detectată"
+        else:
+            faces = f"{found} {'față detectată' if found == 1 else 'fețe detectate'}"
+            if usable < found:
+                faces += f" ({usable} suficient de mari pentru analiză)"
+        return f"Imagine statică — {faces}; estimarea angajamentului necesită video"
+
     def run(self) -> None:
+        """Bucla firului AI; se termină când scheduler.take() întoarce None (la shutdown)."""
         predictor = None
         try:
             predictor = self.factory()  # o singură instanță, creată în firul AI
@@ -116,4 +276,4 @@ class InferenceWorker(QThread):
             finished = time.monotonic()
             self.result.emit(PredictionResult(request.source_id, request.run_id, request.request_id,
                 request.window_start_s, request.window_end_s, status, levels, version, self.demo,
-                max(0, started-request.queued_monotonic_s)*1000, (finished-started)*1000, error))
+                max(0, started-request.queued_monotonic_s)*1000, (finished-started)*1000, error, request.track_id))
