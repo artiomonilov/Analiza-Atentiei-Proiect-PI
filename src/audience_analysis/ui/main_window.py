@@ -8,7 +8,7 @@ from .history import ResultHistory
 
 
 class MainWindow(QMainWindow):
-    """Motor injectat. Widgeturile nu citesc video și nu apelează predictorul."""
+    """Motor injectat. Widgeturile nu citesc video si nu apeleaza predictorul."""
 
     def __init__(self, engine):
         super().__init__()
@@ -75,10 +75,10 @@ class MainWindow(QMainWindow):
         self.history_list = QListWidget()
         layout.addWidget(self.history_list)
 
-        # TODO P3-S2.1/P3-S5.1: intrare formular + SourceConfig; construiește grila
-        # folosind comenzile motorului; ieșire carduri independente; teste CRUD/restart.
-        # TODO P3-S5.3/P3-S5.4: extinde ResultHistory într-un tabel și dialog CSV;
-        # verifică rânduri unice, is_demo și celule goale la eroare.
+        # TODO P3-S2.1/P3-S5.1: intrare formular + SourceConfig; construieste grila
+        # folosind comenzile motorului; iesire carduri independente; teste CRUD/restart.
+        # TODO P3-S5.3/P3-S5.4: extinde ResultHistory intr-un tabel si dialog CSV;
+        # verifica randuri unice, is_demo si celule goale la eroare.
 
         self.engine.result_ready.connect(self.on_result)
         self.engine.status_changed.connect(self.on_status)
@@ -151,7 +151,7 @@ class MainWindow(QMainWindow):
             self.current_run = None
             self.start_button.setEnabled(not self._closing)
             self.stop_button.setEnabled(False)
-            self.result_label.setText("Rezultat activ: — (rezultatele anterioare rămân în istoric)")
+            self.result_label.setText("Rezultat activ: — (rezultatele anterioare raman in istoric)")
             self.preview.clear()
 
     @Slot(object)
@@ -190,7 +190,7 @@ class MainWindow(QMainWindow):
         if len(frame.shape) != 3 or frame.shape[2] < 3:
             return
         image = QImage(frame.data, frame.shape[1], frame.shape[0], frame.strides[0], QImage.Format.Format_BGR888).copy()
-        # copy() desprinde QImage de bufferul NumPy înainte ca pachetul să fie eliberat.
+        #copy() desprinde QImage de bufferul NumPy inainte ca pachetul sa fie eliberat
 
         self.preview.setPixmap(QPixmap.fromImage(image).scaled(480, 240, Qt.AspectRatioMode.KeepAspectRatio))
 
@@ -203,7 +203,7 @@ class MainWindow(QMainWindow):
         self._closing = True
         self.start_button.setEnabled(False)
         self.stop_button.setEnabled(False)
-        self.status_label.setText("Se închid cooperativ lucrătorii…")
+        self.status_label.setText("Se inchid cooperativ lucratorii…")
         self.engine.shutdown()
 
     @Slot()
