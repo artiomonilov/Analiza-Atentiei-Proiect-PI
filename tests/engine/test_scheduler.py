@@ -14,7 +14,10 @@ def test_pending_replacement_and_inflight_preserved(make_request):
     assert inflight.request_id == 0
     assert scheduler.pending_counts() == {"P01": 1}
     assert scheduler.replaced["P01"] == 1
+    assert scheduler.take(block=False) is None  # așteaptă confirmarea rezultatului deja în calcul
+    assert scheduler.complete("P01", 0, run_id="run1")
     assert scheduler.take(block=False).request_id == 2
+    assert scheduler.complete("P01", 2, run_id="run1")
     assert scheduler.take(block=False) is None
     scheduler.close()
     assert scheduler.take() is None
@@ -26,8 +29,10 @@ def test_two_sources_alternate_and_keep_identity(make_request):
         scheduler.activate(source, "run1")
         scheduler.submit(make_request(source))
     assert scheduler.take(block=False).source_id == "P01"
+    assert scheduler.complete("P01", 0, run_id="run1")
     scheduler.submit(make_request("P01", number=1))
     assert scheduler.take(block=False).source_id == "P02"
+    assert scheduler.complete("P02", 0, run_id="run1")
     assert scheduler.take(block=False).source_id == "P01"
 
 

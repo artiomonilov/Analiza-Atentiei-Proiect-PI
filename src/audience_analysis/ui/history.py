@@ -21,7 +21,7 @@ class ResultHistory:
     def export_csv(self, path: str | Path) -> None:
         dimensions = sorted({name for row in self.records for name in (row.levels or {})})
         columns = ["source_id", "run_id", "request_id", "window_start_s", "window_end_s", "status",
-                   "model_version", "is_demo", "queue_wait_ms", "inference_ms", "error_message"]
+                   "model_version", "is_demo", "queue_wait_ms", "inference_ms", "error_message", "track_id"]
         with Path(path).open("w", newline="", encoding="utf-8-sig") as handle:
             writer = csv.DictWriter(handle, fieldnames=columns+dimensions)
             writer.writeheader()

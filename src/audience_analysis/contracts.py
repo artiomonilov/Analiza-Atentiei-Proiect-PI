@@ -38,6 +38,8 @@ class Status(StrEnum):
     INSUFFICIENT_DATA = "INSUFFICIENT_DATA"
     OK = "OK"
     NO_FACE = "NO_FACE"
+    AMBIGUOUS_SUBJECT = "AMBIGUOUS_SUBJECT"
+    LOW_QUALITY = "LOW_QUALITY"
     ERROR = "ERROR"
     MODEL_UNAVAILABLE = "MODEL_UNAVAILABLE"
     END_OF_SOURCE = "END_OF_SOURCE"
@@ -54,6 +56,12 @@ class SourceConfig:
 
     def __post_init__(self) -> None:
         identifier(self.source_id)
+        if (isinstance(self.kind, str) and not self.location and self.kind.strip()
+                and self.kind not in {"demo", "file", "camera", "network"}):
+            # Compatibilitate cu MainWindow: formularul apelează SourceConfig(id, nume, text_sursă),
+            # deci calea fișierului ajunge în poziția "kind". O tratăm ca fișier.
+            object.__setattr__(self, "location", self.kind.strip())
+            object.__setattr__(self, "kind", "file")
         if not self.display_name.strip() or self.kind not in {"demo", "file", "camera", "network"}:
             raise ValueError("Numele sau tipul sursei este invalid")
         if self.kind != "demo" and not self.location:
@@ -68,12 +76,24 @@ class FramePacket:
     media_time_s: float
     image: NDArray[np.uint8] = field(repr=False)
     face_boxes: tuple[tuple[int, int, int, int], ...] = ()
+    # Numere anonime ale fețelor, aliniate cu face_boxes (gol = fără urmărire). Nu identifică persoane.
+    track_ids: tuple[int, ...] = ()
+    timestamp_source: str = "unspecified"
+    capture_epoch: int = 0
 
     def __post_init__(self) -> None:
         identifier(self.source_id)
         identifier(self.run_id)
         counter(self.frame_id)
         nonnegative(self.media_time_s)
+        counter(self.capture_epoch)
+        if not isinstance(self.timestamp_source, str) or not self.timestamp_source:
+            raise ValueError("Originea timestampului este obligatorie")
+        if self.track_ids:
+            if len(self.track_ids) != len(self.face_boxes) or len(set(self.track_ids)) != len(self.track_ids):
+                raise ValueError("track_ids trebuie să fie unice și aliniate cu face_boxes")
+            for value in self.track_ids:
+                counter(value)
         if self.image.dtype != np.uint8 or self.image.ndim != 3 or self.image.shape[2] != 3 or min(self.image.shape[:2]) < 1:
             raise ValueError("Imaginea trebuie să fie BGR uint8 [H,W,3]")
         for x, y, width, height in self.face_boxes:
@@ -85,6 +105,7 @@ class FramePacket:
         image.setflags(write=False)
         object.__setattr__(self, "image", image)
         object.__setattr__(self, "face_boxes", tuple(tuple(box) for box in self.face_boxes))
+        object.__setattr__(self, "track_ids", tuple(self.track_ids))
 
 
 @dataclass(frozen=True)
@@ -119,11 +140,14 @@ class InferenceRequest:
     window_end_s: float
     queued_monotonic_s: float
     sequence: PreparedSequence
+    track_id: int | None = None  # fața urmărită în sursă; None = sursă fără urmărire (demo)
 
     def __post_init__(self) -> None:
         identifier(self.source_id)
         identifier(self.run_id)
         counter(self.request_id)
+        if self.track_id is not None:
+            counter(self.track_id)
         for value in (self.window_start_s, self.window_end_s, self.queued_monotonic_s):
             nonnegative(value)
         if self.window_start_s > self.window_end_s:
@@ -160,11 +184,14 @@ class PredictionResult:
     queue_wait_ms: float
     inference_ms: float
     error_message: str | None = None
+    track_id: int | None = None  # aceeași valoare ca în InferenceRequest
 
     def __post_init__(self) -> None:
         identifier(self.source_id)
         identifier(self.run_id)
         counter(self.request_id)
+        if self.track_id is not None:
+            counter(self.track_id)
         for value in (self.window_start_s, self.window_end_s, self.queue_wait_ms, self.inference_ms):
             nonnegative(value)
         if self.window_end_s < self.window_start_s or type(self.is_demo) is not bool:

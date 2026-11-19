@@ -36,9 +36,10 @@ def test_temporal_selection_and_run_reset(config):
 
 
 def test_real_adapters_are_explicit(config):
-    with pytest.raises(NotImplementedError):
+    with pytest.raises(FileNotFoundError):
         open_real_source(SourceConfig("P01", "Clip", "file", "not-opened.mp4"))
-    with pytest.raises(NotImplementedError):
-        detect_real_face(np.zeros((10, 10, 3), np.uint8))
-    with pytest.raises(NotImplementedError):
-        SequenceBuilder(config, demo=False)
+    class Detector:
+        def detect(self, frame):
+            return "injected-detector-result"
+    assert detect_real_face(np.zeros((10, 10, 3), np.uint8), Detector()) == "injected-detector-result"
+    assert SequenceBuilder(config, demo=False).config == config

@@ -27,6 +27,7 @@ audience-calibrate = "calibrate_session:main"
 audience-validate = "run_validation:main"
 audience-dashboard = "run_dashboard:main"
 audience-session = "experimental_session:main"
+audience-p2-video = "audience_analysis.engine.cli:main"
 
 [tool.setuptools]
 py-modules = ["run_video_analysis", "calibrate_session", "run_validation", "run_dashboard", "experimental_session", "compare_blinks", "test_face_landmarker"]

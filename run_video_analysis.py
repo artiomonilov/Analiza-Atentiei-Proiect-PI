@@ -42,6 +42,8 @@ def main(argv=None) -> int:
             if args.calibration or args.neutral_image or args.temporal_config:
                 raise ValueError("Pachetul înghețat nu permite suprascrierea calibrării sau pragurilor.")
             plan = FrozenExperiment.load(args.frozen_plan)
+            if plan.payload.get("pipeline_parameters") is not None:
+                raise ValueError("Planul P2 necesită audience-p2-video, nu procesorul video separat")
             plan.validate_target(args.session_id, args.role); plan.validate_runtime(args.model)
             plan.validate_source(source, args.role)
             manager, config = plan.estimators()

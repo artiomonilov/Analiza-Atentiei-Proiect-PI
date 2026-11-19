@@ -1,5 +1,17 @@
 # Analiza atenției și angajamentului — laborator video
 
+## Pipeline integrat P2 + geometrie Artiom
+
+Pe `integration/artiom-ilie-video`, `python -m audience_analysis.engine.cli`
+folosește efectiv EngineController/SourceWorker: o captură P2, YuNet/tracking,
+MediaPipe reutilizat, head pose/ochi și analiză temporală, cu export incremental
+pentru dashboard. P1 rămâne separat; fără pachet real apare MODEL_UNAVAILABLE.
+Nu este implementat un scor de atenție. Comenzile verificate, contractele,
+testele și limitările sunt în [raportul integrării](docs/artiom-ilie-integration.md).
+În worktree setează PYTHONPATH la propriul director `src`, ca să nu imporți
+versiunea instalată a altui branch. Demo-ul UI existent nu activează implicit
+geometria și nu reprezintă această comandă integrată.
+
 Prototip Python pentru **experimente pe materiale autorizate**, cu aplicație desktop, preprocesare comună și comparație R0/R1/R2. Etichetele estimate nu sunt măsurători ale atenției și nu sunt destinate evaluării sau monitorizării operaționale a studenților.
 
 Starea curentă a ramurii și toate taskurile P1: [bilanțul de finalizare](docs/artiom-branch-completion.md). Mediul separat verificat și versiunile: [docs/environment.md](docs/environment.md). Predictorul P1, manifestele și comparațiile sunt documentate în [docs/p1-data-model.md](docs/p1-data-model.md). Nu este furnizat un model de angajament evaluat pe DAiSEE.

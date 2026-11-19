@@ -84,8 +84,10 @@ class FrozenExperiment:
         self.payload = self.document["payload"]
         self.sha256 = self.document["sha256"]
         required = {"schema_version", "config_version", "calibration", "development_sessions", "temporal", "validation_parameters", "model", "environment", "code"}
-        if not isinstance(self.payload, dict) or set(self.payload) != required or self.payload.get("schema_version") != 1:
+        if not isinstance(self.payload, dict) or set(self.payload) - {"pipeline_parameters"} != required or self.payload.get("schema_version") != 1:
             raise ValueError("Structură/versiune de pachet incompatibilă.")
+        if "pipeline_parameters" in self.payload and not isinstance(self.payload["pipeline_parameters"], dict):
+            raise ValueError("Parametri de pipeline incompatibili")
         if not isinstance(self.payload["validation_parameters"], dict) or not self.payload["development_sessions"]:
             raise ValueError("Pachet fără parametri sau surse de dezvoltare.")
         from .calibration import CalibrationManager
@@ -102,10 +104,13 @@ class FrozenExperiment:
         config = manager.temporal_config(temporal or TemporalConfig())
         if not development_sessions: raise ValueError("Este necesară cel puțin o sesiune D de dezvoltare.")
         sources = []
+        pipeline_parameters = development_sessions[0].reproducibility.get("pipeline_parameters") if development_sessions else None
         for session in development_sessions:
             validate_role_id(session.session_id, session.role)
             if session.role != "development": raise ValueError("V01/C01 nu pot fi folosite pentru ajustarea parametrilor.")
             receipt = session.reproducibility
+            if digest(receipt.get("pipeline_parameters")) != digest(pipeline_parameters):
+                raise ValueError("Sesiunile D folosesc pipeline-uri diferite")
             if receipt.get("role") != "development" or receipt.get("session_id") != session.session_id or receipt.get("measurement_content_sha256") != measurement_digest(load_rows(session.measurement_path)):
                 raise ValueError("D01 necesită proveniență verificabilă; procesează cu --session-id D01 --role development.")
             if digest(receipt.get("temporal")) != digest(asdict(config)) or digest(receipt.get("calibration")) != digest(manager.to_dict()):
@@ -126,6 +131,8 @@ class FrozenExperiment:
                    "development_sessions": sources, "temporal": asdict(config), "validation_parameters": params,
                    "model": {"name": "MediaPipe Face Landmarker", "sha256": file_digest(model_path)},
                    "environment": environment_versions(), "code": code_version()}
+        if pipeline_parameters is not None:
+            payload["pipeline_parameters"] = pipeline_parameters
         return cls({"payload": payload, "sha256": digest(payload)})
 
     @classmethod
@@ -180,12 +187,15 @@ def make_receipt(plan, session_id, role, measurements, *, events=None, source=No
     if source is not None: plan.validate_source(source, role)
     from .dashboard_data import load_rows
     from .validation import read_blinks
-    return {"schema_version": 1, "session_id": session_id, "role": role, "plan_sha256": plan.sha256,
+    receipt = {"schema_version": 1, "session_id": session_id, "role": role, "plan_sha256": plan.sha256,
             "model_sha256": plan.payload["model"]["sha256"], "code": code_version(),
             "measurements_sha256": file_digest(measurements), "measurement_content_sha256": measurement_digest(load_rows(measurements)),
             "events_sha256": file_digest(events) if events else None,
             "event_content_sha256": event_digest(read_blinks(events)) if events else None,
             "source_sha256": file_digest(source) if source is not None and not isinstance(source, int) else None}
+    if "pipeline_parameters" in plan.payload:
+        receipt["pipeline_parameters"] = json.loads(json.dumps(plan.payload["pipeline_parameters"]))
+    return receipt
 
 
 def check_receipt(plan, receipt, measurements, *, session_id, events=None):
@@ -199,6 +209,8 @@ def check_evaluation_data(plan, receipt, rows, *, session_id, events=None, role=
     """Guard comun pentru CLI, dashboard și API-ul final de nivel inferior."""
     plan.validate_runtime()
     if not isinstance(receipt, dict): raise ValueError("Proveniență absentă/incompatibilă.")
+    if digest(receipt.get("pipeline_parameters")) != digest(plan.payload.get("pipeline_parameters")):
+        raise ValueError("Pipeline-ul diferă de configurația înghețată")
     if role is not None and receipt.get("role") != role: raise ValueError("Rol de proveniență incompatibil.")
     plan.validate_target(session_id, receipt.get("role"))
     if receipt.get("session_id") != session_id or receipt.get("plan_sha256") != plan.sha256:

@@ -188,28 +188,8 @@ class VideoProcessor:
                     face = result.faces[0]
                     self.pose_estimator.calibrate(face.transformation_matrix)
                     self.eye_estimator.calibrate(face, (neutral.shape[1], neutral.shape[0]))
-                writer = None
-                temporal_writer, blink_writer = None, None
-                if output_csv is not None:
-                    output_csv = Path(output_csv)
-                    output_csv.parent.mkdir(parents=True, exist_ok=True)
-                    handle = stack.enter_context(output_csv.open("x", newline="", encoding="utf-8"))
-                    writer = csv.DictWriter(handle, fieldnames=list(VideoMeasurement.__dataclass_fields__))
-                    writer.writeheader()
-                def csv_writer(path, fields):
-                    path = Path(path)
-                    path.parent.mkdir(parents=True, exist_ok=True)
-                    stream = stack.enter_context(path.open("x", newline="", encoding="utf-8"))
-                    new_writer = csv.DictWriter(stream, fieldnames=fields)
-                    new_writer.writeheader()
-                    return new_writer, stream
-                if output_temporal_csv is not None:
-                    fields = ["timestamp_ms", "window_s", "sample_count", "observed_span_ms", "history_truncated",
-                              "head_json", "left_gaze_json", "right_gaze_json", "left_blink_json", "right_blink_json",
-                              "filtered_head_json", "filtered_left_iris_json", "filtered_right_iris_json"]
-                    temporal_writer, temporal_stream = csv_writer(output_temporal_csv, fields)
-                if output_blinks_csv is not None:
-                    blink_writer, blink_stream = csv_writer(output_blinks_csv, list(BlinkEvent.__dataclass_fields__))
+                from .facial_export import FacialCSVExport
+                facial_export = stack.enter_context(FacialCSVExport(output_csv, output_temporal_csv, output_blinks_csv))
                 analyzer = TemporalAnalyzer(self.temporal_config)
                 temporal = None
                 start = time.monotonic()
@@ -249,21 +229,11 @@ class VideoProcessor:
                         frames += 1
                         faces += int(record.face_detected)
                         errors += int(error is not None)
-                        if writer:
-                            writer.writerow(asdict(record))
-                            handle.flush()
+                        facial_export.write(record, temporal)
                         if on_result:
                             on_result(record)
                         if on_temporal:
                             on_temporal(temporal)
-                        if temporal_writer:
-                            for window in temporal.windows:
-                                temporal_writer.writerow(temporal_csv_row(temporal, window))
-                            temporal_stream.flush()
-                        if blink_writer:
-                            for event in temporal.new_blinks:
-                                blink_writer.writerow(asdict(event))
-                            blink_stream.flush()
                         if display:
                             visible = frame if valid_frame else np.zeros((360, 640, 3), np.uint8)
                             image = annotate_frame(visible, result, pose, eyes, record, show_landmarks=show_landmarks,

@@ -26,7 +26,7 @@ Cadrele sunt selectate după timp, dintr-un deque limitat la 128. Țintele sunt 
 
 Fiecare pornire/resetare generează un run_id UUID nou. request_id începe de la 0 și crește în rulare; frame_id crește independent. SourceStatusEvent are propriul event_id.
 
-Schedulerul deține Queue(maxsize=1) pentru fiecare sursă. O Condition protejează atât înlocuirea, cât și preluarea; fără empty()/full(), fără busy-wait sau task_done(). O cerere nouă înlocuiește numai cererea în așteptare și mărește contorul replaced. Preluarea alternează sursele disponibile. Calculul început nu este întrerupt.
+Schedulerul deține mailboxuri protejate de o Condition. Implicit există maximum un pending per sursă, 16 pending global și 16 surse; preluarea alternează sursele. În plus, un singur rezultat AI poate aștepta confirmarea controllerului. `complete(source_id, request_id, run_id=...)` confirmă numai cererea efectiv preluată, fără a atinge alt run. Înlocuirea/expirarea elimină cererile pending; calculul început nu este întrerupt, însă un rezultat expirat este refuzat. Nu există busy-wait sau task_done().
 
 Stop/reset/remove invalidează run_id înaintea următoarelor livrări, elimină coada și preview-ul, semnalizează Event-ul capturii și respinge răspunsurile vechi. ResultGate respinge rezultatele duplicate/învechite, dar acceptă un răspuns valid în curs chiar dacă există o cerere mai nouă în coadă.
 
@@ -45,6 +45,56 @@ Istoricul deduplică (source_id, run_id, request_id). CSV păstrează is_demo ș
 Contractele vechi sunt păstrate în `legacy_contracts.py`, iar fereastra anterioară în `legacy_ui.py`; importurile vechilor module/teste au fost ajustate. `python -m audience_analysis.app` rămâne intrarea anterioară, nefolosită de mini-template. Nu există un al doilea proiect sau un al doilea pachet instalabil. Adaptarea codului real la noile contracte rămâne în taskurile P1/P2, nu este activată în această livrare.
 
 ## Pipeline CLI experimental
+
+### Contractul integrat P2 / Artiom
+
+`FramePacket` păstrează API-ul pozițional anterior și adaugă la sfârșit
+`timestamp_source: str = "unspecified"` și `capture_epoch: int = 0`.
+Epoch este nenegativ; originea nu poate fi goală. FileSource folosește
+FrameClock/POS_MSEC, cu fallback FPS/30 FPS etichetat. LiveSource folosește
+monotonic relativ la run; indexul său este indexul cadrelor livrate, nu indexul
+unei înregistrări externe. Timestampurile ms pentru MediaPipe sunt strict
+crescătoare. Reconnect mărește capture_epoch, păstrând axa monotonică a runului.
+
+`FacialFeatureResult` din `facial_features.py` este un DTO separat de
+ModelOutput: source_id, run_id, frame_index, timestamp_ms, track_id opțional,
+capture_epoch, VideoMeasurement, TemporalUpdate, calibration_status și
+association_status. `to_dict()` adaugă schema_version=1, availability și unități.
+Unghiurile sunt grade în convenția Rz(roll)Ry(yaw)Rx(pitch); EAR este
+adimensional, irisul este normalizat în regiunea ochiului. None rămâne None
+în JSON și celulă goală în CSV. Nu există levels sau scor de atenție în DTO.
+
+GeometryConfig/FacialAnalysisSession sunt construite per source/run în
+SourceWorker, fără VideoCapture sau VideoProcessor.run. Head/eye consumă același
+rezultat MediaPipe pe cadrul întreg. Asocierea cu YuNet necesită un candidat
+geometric unic; fără `track_id` explicit se acceptă numai o singură față YuNet.
+Schimbarea trackului/epochului resetează analiza temporală. O calibrare deja
+legată de țintă nu este transferată: noua geometrie rămâne indisponibilă până
+la o nouă rulare confirmată de operator. Trackul nu este identitate biometrică.
+
+`EngineController.geometry_ready` livrează cel mai nou DTO; alternativ,
+`take_latest_features(source_id)` îl consumă. Geometria și stările workerului
+au câte un mailbox și maximum o notificare Qt în așteptare per sursă; stările
+tranzitorii se pot comasa. Exportul per cadru este complet și se face în worker.
+`model_status_changed` raportează încărcarea P1 sau MODEL_UNAVAILABLE;
+`run_finished` raportează inclusiv erorile de cleanup/export după Stop.
+
+FacialCSVExport este comun cu VideoProcessor. Exportul P2 adaugă la schema
+VideoMeasurement source_id/run_id/track_id/capture_epoch/association_status,
+fără imagini, display_name sau căi de surse. CSV-ul AI PredictionResult rămâne
+altă schemă și nu se importă drept măsurători geometrice. Dashboardul întrerupe
+curbele și variația capului la schimbarea contextului; refuză asocierea automată
+a datelor live cu cadrele unui fișier fără o mapare independentă.
+
+FrozenExperiment schema 1 acceptă acum opțional `pipeline_parameters`:
+configurația P2, politica de asociere/track, hashul YuNet și convenția de timp.
+Sesiunile D trebuie să aibă aceiași parametri; guardul final îi leagă de receipt.
+Un plan P2 necesită comanda P2 și nu poate fi executat de vechiul run_video_analysis.
+Profilele/planurile legacy fără acest câmp rămân citibile, dar nu sunt convertite
+automat în planuri P2. Modelul/sursa/codul/mediul sunt verificate și la închiderea
+runului; o schimbare împiedică scrierea provenienței. Un V oprit înainte de EOF
+nu primește receipt de evaluare finală. Hashurile nu demonstrează independența
+semantică, consimțământul sau antrenarea unui model.
 
 Consolidare `artiom-branch`: guard-ul `experimental.check_evaluation_data` este apelat și de `validation.evaluate` pentru evaluarea finală, nu doar de CLI/dashboard. Canonicalizarea numericelor, flagurilor, valorilor lipsă și frame_index este comună pentru CSV/snapshot/API. Datele, evenimentele (inclusiv absența unui fișier de evenimente așteptat), rolul, configurația, codul și receiptul trebuie să corespundă. Profilele C pot include `source_materials` cu hashuri/kind, fără nume/căi. Același material cunoscut este refuzat în D/V; re-encodarea și independența semantică nu sunt demonstrate prin hash.
 

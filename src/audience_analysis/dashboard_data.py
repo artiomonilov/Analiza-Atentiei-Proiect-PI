@@ -33,6 +33,11 @@ def select_interval(rows, start_ms, end_ms):
     return [r for r in rows if start_ms <= r["timestamp_ms"] <= end_ms]
 
 
+def measurement_context(row):
+    return tuple(str(row[key]) if row.get(key) not in (None, "") else None
+                 for key in ("source_id", "run_id", "capture_epoch", "track_id"))
+
+
 def segments(rows, field, max_gap_ms=500):
     """Liste de puncte independente: nu unește lipsurile, gapurile sau wrap-ul Euler."""
     component = "head" if field in {"yaw", "pitch", "roll", "head_variation"} else "left_ear" if field.startswith("left_ear") else "right_ear" if field.startswith("right_ear") else "left_iris" if field.startswith("left") else "right_iris"
@@ -41,13 +46,14 @@ def segments(rows, field, max_gap_ms=500):
         value = row.get(field)
         available = valid(row, component) and value is not None and math.isfinite(value)
         t = row["timestamp_ms"]
-        discontinuity = previous is not None and (t - previous[0] > max_gap_ms or (field in {"yaw", "pitch", "roll"} and available and abs(value - previous[1]) > 180))
+        context = measurement_context(row)
+        discontinuity = previous is not None and (context != previous[2] or t - previous[0] > max_gap_ms or (field in {"yaw", "pitch", "roll"} and available and abs(value - previous[1]) > 180))
         if not available or discontinuity:
             if current: groups.append(current)
             current, previous = [], None
         if available:
             current.append((t / 1000, float(value)))
-            previous = (t, value)
+            previous = (t, value, context)
     if current: groups.append(current)
     return groups
 
@@ -55,9 +61,11 @@ def segments(rows, field, max_gap_ms=500):
 def with_head_variation(rows, window_ms=1000, max_gap_ms=500):
     from collections import deque
     history, result, previous = deque(), [], None
+    previous_context = None
     for row in rows:
         t = row["timestamp_ms"]
-        if not valid(row, "head") or (previous is not None and t - previous > max_gap_ms):
+        context = measurement_context(row)
+        if not valid(row, "head") or (previous is not None and (t - previous > max_gap_ms or context != previous_context)):
             history.clear()
         if valid(row, "head"):
             history.append((t, [row[k] for k in ("yaw", "pitch", "roll")]))
@@ -69,6 +77,7 @@ def with_head_variation(rows, window_ms=1000, max_gap_ms=500):
             value = float((1 - resultant.clip(0, 1)).mean())
         result.append({**row, "head_variation": value})
         previous = t
+        previous_context = context
     return result
 
 
@@ -167,6 +176,8 @@ class DashboardSession:
 class VideoNavigator:
     """Frame seeking OpenCV, fără inferență; timestampul vine din CSV-ul aceleiași sesiuni."""
     def __init__(self, path, rows):
+        if any(str(row.get("timestamp_source") or "").startswith(("webcam_", "network_", "live_")) for row in rows):
+            raise ValueError("Datele live necesită o mapare independentă la cadrele înregistrării; nu folosi indexul livrat de cameră")
         import cv2
         self.cv2 = cv2
         self.capture = cv2.VideoCapture(str(path))
